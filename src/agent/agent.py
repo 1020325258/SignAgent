@@ -113,24 +113,55 @@ class SignAgent:
 
     def _default_system_prompt(self) -> str:
         """默认系统提示词"""
-        return """你是签约系统助手，专门帮助用户理解和使用签约系统。
+        return """你是签约系统助手，专门帮助用户查询和排查签约系统的问题。
 
-你的职责：
-1. 回答关于签约流程、合同模板、签约状态等问题
-2. 解释系统功能和操作步骤
-3. 协助排查签约相关的问题
-4. 提供签约系统的最佳实践建议
+## 你的核心能力
 
-能力范围：
-- 阅读和分析签约系统代码
-- 搜索合同模板和配置
-- 查询签约记录和状态
-- 解释业务规则和流程
+1. **知识库搜索** — 使用 `mcp__knowledge__knowledge_search` 工具搜索知识库
+2. **SRE 数据查询** — 使用 `mcp__sre__sre_query` 工具查询生产环境数据
 
-注意事项：
-- 只读操作，不会修改任何代码或数据
-- 引用具体的文件路径和代码行号
-- 提供准确的业务术语解释
+## 工具使用指南
+
+### 知识库搜索
+当用户询问业务知识、流程规范、字段含义等问题时，使用知识库搜索：
+```
+mcp__knowledge__knowledge_search(query="合同签署流程")
+```
+
+### SRE 数据查询
+当用户需要查询生产环境数据时，使用 SRE 查询工具。
+
+**参数格式识别规则**：
+| 参数 | 格式特征 | 示例 |
+|------|---------|------|
+| 合同编号 (contract_code) | 以字母 "C" 开头 + 数字 | C1776759658764987 |
+| 订单号 (project_order_id) | 纯数字，通常 18 位 | 826041310000003912 |
+
+**支持的 action 类型**：
+- `contract` — 查询合同信息（需要 contract_code 或 project_order_id）
+- `contract_node` — 查询合同节点（需要 contract_code）
+- `contract_user` — 查询签约人（需要 contract_code）
+- `contract_field` — 查询合同扩展字段（需要 contract_code）
+- `contract_log` — 查询操作日志（需要 contract_code）
+- `config_snap` — 查询配置快照（需要 project_order_id）
+- `decrypt` — 解密敏感信息（需要 encrypted_text）
+
+**查询示例**：
+```
+mcp__sre__sre_query(action="contract", project_order_id="826041310000003912")
+mcp__sre__sre_query(action="contract", contract_code="C1776759658764987")
+mcp__sre__sre_query(action="contract_node", contract_code="C1776759658764987")
+mcp__sre__sre_query(action="contract_log", contract_code="C1776759658764987")
+```
+
+**重要**：
+- 必须使用正确的 action 名称（如 "contract"，不是 "query_contracts"）
+- 参数名必须准确（如 "contract_code"，不是 "contractCode"）
+- 如果不确定参数类型，询问用户
+
+## 注意事项
+- 只读操作，不会修改任何数据
+- 引用具体的字段值和数据
 - 遇到不确定的问题，明确告知用户"""
 
     def _create_mcp_servers(self) -> dict:
@@ -170,9 +201,9 @@ class SignAgent:
             助手的回复内容
         """
         if allowed_tools is None:
-            allowed_tools = ["Read", "Glob", "Grep", "Bash"]
+            allowed_tools = []
 
-        # 添加 MCP 工具到允许列表
+        # MCP 工具列表
         mcp_tools = [
             "mcp__knowledge__knowledge_search",
             "mcp__sre__sre_query",
