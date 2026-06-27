@@ -13,6 +13,7 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     create_sdk_mcp_server,
     AssistantMessage,
+    UserMessage,
     TextBlock,
     ThinkingBlock,
     ToolUseBlock,
@@ -213,11 +214,14 @@ class SignAgent:
                         if self.debug:
                             yield format_tool_use(block.name, block.input)
 
-                    elif isinstance(block, ToolResultBlock):
-                        # 工具执行结果（仅 debug 模式）
-                        if self.debug:
-                            content = block.content if isinstance(block.content, str) else str(block.content)
-                            yield format_tool_result(content, block.is_error or False)
+            elif isinstance(message, UserMessage):
+                # 工具执行结果（仅 debug 模式）
+                if self.debug and message.tool_use_result:
+                    result = message.tool_use_result
+                    content = result.get("content", "")
+                    is_error = result.get("is_error", False)
+                    if content:
+                        yield format_tool_result(content, is_error)
 
             elif isinstance(message, ResultMessage):
                 pass  # 跳过结果消息
