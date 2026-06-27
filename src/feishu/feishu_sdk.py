@@ -163,10 +163,62 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
     """
     import re
 
-    lines = content.split('\n')
-    processed_lines = []
+    # ── 解析内容，分离 markdown 文本和表格 ──
+    elements = []
+    markdown_lines = []
     in_table = False
     table_headers = []
+    table_rows = []
+
+    def flush_markdown():
+        """将累积的 markdown 行添加到 elements"""
+        if markdown_lines:
+            text = '\n'.join(markdown_lines).strip()
+            if text:
+                elements.append({
+                    "tag": "markdown",
+                    "content": text
+                })
+            markdown_lines.clear()
+
+    def flush_table():
+        """将累积的表格添加到 elements"""
+        if table_headers and table_rows:
+            # 构建飞书 Table 组件
+            columns = []
+            for i, header in enumerate(table_headers):
+                columns.append({
+                    "name": f"col_{i}",
+                    "display_name": header,
+                    "data_type": "text",
+                    "width": "auto"
+                })
+
+            rows = []
+            for row in table_rows:
+                row_data = {}
+                for i, cell in enumerate(row):
+                    if i < len(table_headers):
+                        row_data[f"col_{i}"] = cell
+                rows.append(row_data)
+
+            elements.append({
+                "tag": "table",
+                "page_size": 10,
+                "row_height": "medium",
+                "header_style": {
+                    "text_align": "left",
+                    "text_size": "normal",
+                    "background_style": "grey",
+                    "bold": True
+                },
+                "columns": columns,
+                "rows": rows
+            })
+        table_headers.clear()
+        table_rows.clear()
+
+    lines = content.split('\n')
 
     for line in lines:
         # 过滤掉图片链接 ![alt](url)
@@ -175,11 +227,12 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
 
         # 将 ## 标题 转换为 **标题**
         if line.strip().startswith('#'):
+            flush_table()
             title = re.sub(r'^#+\s*', '', line.strip())
-            processed_lines.append(f"**{title}**")
+            markdown_lines.append(f"**{title}**")
             continue
 
-        # ── 表格处理：飞书卡片不支持标准 markdown 表格，转换成列表格式 ──
+        # ── 表格处理：检测 markdown 表格，转换成飞书 Table 组件 ──
         if re.match(r'^\s*\|.*\|\s*$', line.strip()):
             cells = [c.strip() for c in line.strip().split('|') if c.strip()]
 
@@ -190,37 +243,30 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
 
             # 第一行是表头
             if not in_table:
+                flush_markdown()
                 table_headers = cells
                 in_table = True
                 continue
 
-            # 数据行：转换成 **表头**: 值 格式
+            # 数据行
             if table_headers and len(cells) == len(table_headers):
-                for header, value in zip(table_headers, cells):
-                    processed_lines.append(f"**{header}**: {value}")
-                processed_lines.append("")  # 空行分隔
-            else:
-                # 没有表头或列数不匹配，保留原格式
-                processed_lines.append(line)
+                table_rows.append(cells)
             continue
 
         # 表格结束
         if in_table and not re.match(r'^\s*\|.*\|\s*$', line.strip()):
+            flush_table()
             in_table = False
-            table_headers = []
 
-        processed_lines.append(line)
+        markdown_lines.append(line)
 
-    processed_content = '\n'.join(processed_lines)
+    # 处理剩余内容
+    flush_markdown()
+    flush_table()
 
     # 构建卡片
     card = {
-        "elements": [
-            {
-                "tag": "markdown",
-                "content": processed_content
-            }
-        ]
+        "elements": elements
     }
 
     # 如果是思考状态，添加一个 loading 提示
