@@ -9,13 +9,13 @@ from claude_agent_sdk import tool
 
 logger = logging.getLogger(__name__)
 
-# Apollo 配置（与 milo-v2 保持一致）
-APOLLO_BASE_URL = os.getenv("APOLLO_BASE_URL", "http://apollo.portal.life.ke.com")
-APOLLO_TOKEN = os.getenv("APOLLO_TOKEN", "")
-APOLLO_DEFAULT_ENV = os.getenv("APOLLO_DEFAULT_ENV", "PROD")
-APOLLO_DEFAULT_APP_ID = os.getenv("APOLLO_DEFAULT_APP_ID", "utopia-nrs-sales-project")
-APOLLO_DEFAULT_CLUSTER = os.getenv("APOLLO_DEFAULT_CLUSTER", "default")
-APOLLO_DEFAULT_NAMESPACE = os.getenv("APOLLO_DEFAULT_NAMESPACE", "application")
+# Apollo 配置（固定值，与 milo-v2 一致）
+APOLLO_BASE_URL = "http://apollo.portal.life.ke.com"
+APOLLO_TOKEN = "a280f70eea76d4948a90e94819306e3b3fc9a875d969e499ddc78f70845dcfed"
+APOLLO_ENV = "PROD"
+APOLLO_APP_ID = "utopia-nrs-sales-project"
+APOLLO_CLUSTER = "default"
+APOLLO_DEFAULT_NAMESPACE = "application"
 
 
 async def apollo_get(url: str) -> Any:
@@ -46,20 +46,20 @@ async def apollo_get(url: str) -> Any:
         return None
 
 
-async def apollo_get_item(env: str, app_id: str, cluster: str, namespace: str, key: str) -> Optional[dict]:
+async def apollo_get_item(namespace: str, key: str) -> Optional[dict]:
     """查询单个配置项。"""
-    url = f"{APOLLO_BASE_URL}/openapi/v1/envs/{env}/apps/{app_id}/clusters/{cluster}/namespaces/{namespace}/items/{key}"
+    url = f"{APOLLO_BASE_URL}/openapi/v1/envs/{APOLLO_ENV}/apps/{APOLLO_APP_ID}/clusters/{APOLLO_CLUSTER}/namespaces/{namespace}/items/{key}"
     return await apollo_get(url)
 
 
-async def apollo_list_items(env: str, app_id: str, cluster: str, namespace: str) -> Optional[list]:
+async def apollo_list_items(namespace: str) -> Optional[list]:
     """列出 namespace 下所有配置项（自动分页）。"""
     all_items = []
     page = 0
     page_size = 100
 
     while True:
-        url = f"{APOLLO_BASE_URL}/openapi/v1/envs/{env}/apps/{app_id}/clusters/{cluster}/namespaces/{namespace}/items?page={page}&size={page_size}"
+        url = f"{APOLLO_BASE_URL}/openapi/v1/envs/{APOLLO_ENV}/apps/{APOLLO_APP_ID}/clusters/{APOLLO_CLUSTER}/namespaces/{namespace}/items?page={page}&size={page_size}"
         data = await apollo_get(url)
 
         if data is None:
@@ -80,9 +80,9 @@ async def apollo_list_items(env: str, app_id: str, cluster: str, namespace: str)
     return all_items
 
 
-async def apollo_get_latest_release(env: str, app_id: str, cluster: str, namespace: str) -> Optional[dict]:
+async def apollo_get_latest_release(namespace: str) -> Optional[dict]:
     """查询 namespace 最新 release 信息。"""
-    url = f"{APOLLO_BASE_URL}/openapi/v1/envs/{env}/apps/{app_id}/clusters/{cluster}/namespaces/{namespace}/releases/latest"
+    url = f"{APOLLO_BASE_URL}/openapi/v1/envs/{APOLLO_ENV}/apps/{APOLLO_APP_ID}/clusters/{APOLLO_CLUSTER}/namespaces/{namespace}/releases/latest"
     return await apollo_get(url)
 
 
@@ -104,18 +104,9 @@ async def apollo_get_latest_release(env: str, app_id: str, cluster: str, namespa
 如果在默认 namespace 中找不到配置，请尝试其他 namespace。
 
 【关键】Apollo 配置的 key 都是英文格式，如 'attach.config.ocrOpenCity'、'contract.trade.enabled' 等。
-不要使用中文作为 key 搜索。
-
-【默认值】如果不传以下参数，会使用默认值：
-- env: PROD
-- app_id: utopia-nrs-sales-project
-- cluster: default
-- namespace: application""",
+不要使用中文作为 key 搜索。""",
     {
         "action": str,
-        "env": str,
-        "app_id": str,
-        "cluster": str,
         "namespace": str,
         "key": str,
     },
@@ -129,32 +120,21 @@ async def apollo_query(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
         }
 
-    # 使用默认值（处理 None 和空字符串）
-    env = args.get("env") or None
-    if not env:
-        env = APOLLO_DEFAULT_ENV
-    app_id = args.get("app_id") or None
-    if not app_id:
-        app_id = APOLLO_DEFAULT_APP_ID
-    cluster = args.get("cluster") or None
-    if not cluster:
-        cluster = APOLLO_DEFAULT_CLUSTER
-    namespace = args.get("namespace") or None
-    if not namespace:
-        namespace = APOLLO_DEFAULT_NAMESPACE
+    # namespace 默认为 application
+    namespace = args.get("namespace", "") or APOLLO_DEFAULT_NAMESPACE
     key = args.get("key", "")
 
-    logger.info("Apollo query: action=%s, env=%s, app_id=%s, namespace=%s, key=%s", action, env, app_id, namespace, key)
+    logger.info("Apollo query: action=%s, namespace=%s, key=%s", action, namespace, key)
 
     try:
         if action == "get":
-            return await _get_item(env, app_id, cluster, namespace, key)
+            return await _get_item(namespace, key)
         elif action == "list":
-            return await _list_items(env, app_id, cluster, namespace)
+            return await _list_items(namespace)
         elif action == "search":
-            return await _search_items(env, app_id, cluster, namespace, key)
+            return await _search_items(namespace, key)
         elif action == "release":
-            return await _get_release(env, app_id, cluster, namespace)
+            return await _get_release(namespace)
         else:
             return {
                 "content": [{"type": "text", "text": f"未知操作: {action}，支持 get/list/search/release"}],
@@ -168,7 +148,7 @@ async def apollo_query(args: dict[str, Any]) -> dict[str, Any]:
         }
 
 
-async def _get_item(env: str, app_id: str, cluster: str, namespace: str, key: str) -> dict:
+async def _get_item(namespace: str, key: str) -> dict:
     """查询单个配置项。"""
     if not key:
         return {
@@ -176,7 +156,7 @@ async def _get_item(env: str, app_id: str, cluster: str, namespace: str, key: st
             "is_error": True,
         }
 
-    data = await apollo_get_item(env, app_id, cluster, namespace, key)
+    data = await apollo_get_item(namespace, key)
     if data is None:
         suggestion = ""
         if namespace == "application":
@@ -191,8 +171,8 @@ async def _get_item(env: str, app_id: str, cluster: str, namespace: str, key: st
         f"## Apollo 配置查询结果\n\n"
         f"| 字段 | 值 |\n"
         f"|------|----|\n"
-        f"| 环境 | {env} |\n"
-        f"| appId | {app_id} |\n"
+        f"| 环境 | {APOLLO_ENV} |\n"
+        f"| appId | {APOLLO_APP_ID} |\n"
         f"| namespace | {namespace} |\n"
         f"| key | {key} |\n"
         f"| value | {value} |\n"
@@ -200,9 +180,9 @@ async def _get_item(env: str, app_id: str, cluster: str, namespace: str, key: st
     return {"content": [{"type": "text", "text": result}]}
 
 
-async def _list_items(env: str, app_id: str, cluster: str, namespace: str) -> dict:
+async def _list_items(namespace: str) -> dict:
     """列出 namespace 下所有配置项。"""
-    data = await apollo_list_items(env, app_id, cluster, namespace)
+    data = await apollo_list_items(namespace)
     if data is None:
         return {
             "content": [{"type": "text", "text": f"无法获取 namespace={namespace} 的配置列表"}],
@@ -216,7 +196,7 @@ async def _list_items(env: str, app_id: str, cluster: str, namespace: str) -> di
 
     lines = [
         f"## Apollo 配置列表\n\n"
-        f"**环境**: {env} | **appId**: {app_id} | **namespace**: {namespace}\n\n"
+        f"**环境**: {APOLLO_ENV} | **appId**: {APOLLO_APP_ID} | **namespace**: {namespace}\n\n"
         f"共 {len(data)} 个配置项：\n\n"
         f"| # | key | value (前100字符) |\n"
         f"|---|-----|--------------------|\n",
@@ -231,7 +211,7 @@ async def _list_items(env: str, app_id: str, cluster: str, namespace: str) -> di
     return {"content": [{"type": "text", "text": "".join(lines)}]}
 
 
-async def _search_items(env: str, app_id: str, cluster: str, namespace: str, keyword: str) -> dict:
+async def _search_items(namespace: str, keyword: str) -> dict:
     """按关键字模糊搜索配置 key。"""
     if not keyword:
         return {
@@ -239,7 +219,7 @@ async def _search_items(env: str, app_id: str, cluster: str, namespace: str, key
             "is_error": True,
         }
 
-    data = await apollo_list_items(env, app_id, cluster, namespace)
+    data = await apollo_list_items(namespace)
     if data is None:
         return {
             "content": [{"type": "text", "text": f"无法获取 namespace={namespace} 的配置列表"}],
@@ -278,9 +258,9 @@ async def _search_items(env: str, app_id: str, cluster: str, namespace: str, key
     return {"content": [{"type": "text", "text": "".join(lines)}]}
 
 
-async def _get_release(env: str, app_id: str, cluster: str, namespace: str) -> dict:
+async def _get_release(namespace: str) -> dict:
     """查询 namespace 最新 release 信息。"""
-    data = await apollo_get_latest_release(env, app_id, cluster, namespace)
+    data = await apollo_get_latest_release(namespace)
     if data is None:
         return {
             "content": [{"type": "text", "text": f"无法获取 namespace={namespace} 的 release 信息"}],
@@ -295,8 +275,8 @@ async def _get_release(env: str, app_id: str, cluster: str, namespace: str) -> d
         f"## Apollo Release 信息\n\n"
         f"| 字段 | 值 |\n"
         f"|------|----|\n"
-        f"| 环境 | {env} |\n"
-        f"| appId | {app_id} |\n"
+        f"| 环境 | {APOLLO_ENV} |\n"
+        f"| appId | {APOLLO_APP_ID} |\n"
         f"| namespace | {namespace} |\n"
         f"| 发布时间 | {release_time} |\n"
         f"| 备注 | {comment} |\n"
