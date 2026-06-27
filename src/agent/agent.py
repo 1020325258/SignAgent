@@ -4,6 +4,7 @@
 基于 Claude Code SDK 实现的签约系统智能助手。
 """
 
+import os
 import asyncio
 from typing import Optional, AsyncGenerator
 from claude_agent_sdk import query, ClaudeAgentOptions, create_sdk_mcp_server, AssistantMessage, TextBlock, ToolUseBlock, ResultMessage
@@ -139,9 +140,14 @@ class SignAgent:
         # 创建 MCP 服务器
         mcp_servers = self._create_mcp_servers()
 
+        # skills 目录
+        skills_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "skills")
+
         options = ClaudeAgentOptions(
             allowed_tools=all_tools,
             mcp_servers=mcp_servers,
+            skills="all",  # 加载所有 skills
+            add_dirs=[skills_dir],  # 添加 skills 目录
             permission_mode="acceptEdits",
             cwd=self.project_dir,
             system_prompt=self.system_prompt,
