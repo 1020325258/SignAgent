@@ -161,15 +161,18 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
     Returns:
         卡片 JSON 字符串
     """
-    # 飞书卡片 markdown 不支持 # 标题，用 **粗体** 替代
-    # 转换标准 markdown 标题为粗体
     import re
+
+    # 飞书卡片 markdown 不支持 # 标题，用 **粗体** 替代
+    # 飞书卡片不支持图片链接，需要过滤掉
     lines = content.split('\n')
     processed_lines = []
     for line in lines:
+        # 过滤掉图片链接 ![alt](url)
+        if re.search(r'!\[.*?\]\(.*?\)', line):
+            continue
         # 将 ## 标题 转换为 **标题**
         if line.strip().startswith('#'):
-            # 去掉 # 号，加粗
             title = re.sub(r'^#+\s*', '', line.strip())
             processed_lines.append(f"**{title}**")
         else:
