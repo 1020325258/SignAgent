@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 KE_RAG_BASE_URL = "https://openapi-ait.ke.com/v1"
 KE_RAG_API_KEY = os.getenv("KE_RAG_API_KEY", "")
 DEFAULT_SPACE_ID = os.getenv("KE_RAG_SPACE_ID", "be5fb25a-7ce8-4268-a7ac-cc90010bf976")
+DEFAULT_USER_ID = os.getenv("KE_RAG_USER_ID", "1000000030973949")
 
 
 @tool(
@@ -52,6 +53,7 @@ async def knowledge_search(args: dict[str, Any]) -> dict[str, Any]:
                     "scope": [{"type": "file", "ids": [space_id]}],
                     "limit": limit,
                     "mode": "normal",
+                    "user": DEFAULT_USER_ID,
                 },
                 headers={
                     "Authorization": f"Bearer {KE_RAG_API_KEY}",
