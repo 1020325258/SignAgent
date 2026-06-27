@@ -187,9 +187,11 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
             # 构建飞书 Table 组件
             columns = []
             for i, header in enumerate(table_headers):
+                # 去掉表头中的 ** 粗体标记（飞书表格 display_name 不支持 markdown）
+                clean_header = header.replace('**', '')
                 columns.append({
                     "name": f"col_{i}",
-                    "display_name": header,
+                    "display_name": clean_header,
                     "data_type": "text",
                     "width": "auto"
                 })
