@@ -163,20 +163,54 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
     """
     import re
 
-    # 飞书卡片 markdown 不支持 # 标题，用 **粗体** 替代
-    # 飞书卡片不支持图片链接，需要过滤掉
     lines = content.split('\n')
     processed_lines = []
+    in_table = False
+    table_headers = []
+
     for line in lines:
         # 过滤掉图片链接 ![alt](url)
         if re.search(r'!\[.*?\]\(.*?\)', line):
             continue
+
         # 将 ## 标题 转换为 **标题**
         if line.strip().startswith('#'):
             title = re.sub(r'^#+\s*', '', line.strip())
             processed_lines.append(f"**{title}**")
-        else:
-            processed_lines.append(line)
+            continue
+
+        # ── 表格处理：飞书卡片不支持标准 markdown 表格，转换成列表格式 ──
+        if re.match(r'^\s*\|.*\|\s*$', line.strip()):
+            cells = [c.strip() for c in line.strip().split('|') if c.strip()]
+
+            # 跳过分隔行 |------|------|
+            if all(re.match(r'^[-:]+$', c) for c in cells):
+                in_table = True
+                continue
+
+            # 第一行是表头
+            if not in_table:
+                table_headers = cells
+                in_table = True
+                continue
+
+            # 数据行：转换成 **表头**: 值 格式
+            if table_headers and len(cells) == len(table_headers):
+                for header, value in zip(table_headers, cells):
+                    processed_lines.append(f"**{header}**: {value}")
+                processed_lines.append("")  # 空行分隔
+            else:
+                # 没有表头或列数不匹配，保留原格式
+                processed_lines.append(line)
+            continue
+
+        # 表格结束
+        if in_table and not re.match(r'^\s*\|.*\|\s*$', line.strip()):
+            in_table = False
+            table_headers = []
+
+        processed_lines.append(line)
+
     processed_content = '\n'.join(processed_lines)
 
     # 构建卡片
