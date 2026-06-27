@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """SRE 生产环境数据查询工具。"""
 import logging
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 from claude_agent_sdk import tool
@@ -28,35 +28,45 @@ ENDPOINT_MAP = {
 }
 
 
+def clean_params(params: dict) -> dict:
+    """清理参数，移除 None 和空字符串。"""
+    return {k: v for k, v in params.items() if v is not None and v != ""}
+
+
 @tool(
     "sre_query",
     """查询 SRE 生产环境数据，用于排查线上问题。
-支持查询：合同信息、合同节点、签约人、扩展字段、签约单据、配置快照、城市公司配置、操作日志、字段配置、协议配置、维度组合。
-还支持解密身份证号、手机号等敏感信息。""",
+
+支持的 action 类型：
+- contract: 查询合同信息（需要 contract_code 或 project_order_id）
+- contract_node: 查询合同节点（需要 contract_code）
+- contract_user: 查询签约人（需要 contract_code）
+- contract_field: 查询合同扩展字段（需要 contract_code）
+- contract_log: 查询操作日志（需要 contract_code）
+- config_snap: 查询配置快照（需要 project_order_id）
+- decrypt: 解密敏感信息（需要 encrypted_text）
+- field_config: 查询字段配置（需要 business_type, gb_code, company_code, contract_type, version）
+
+参数格式：
+- contract_code: 合同编号，以 "C" 开头 + 数字，如 C1776759658764987
+- project_order_id: 订单号，18位纯数字，如 826041310000003912""",
     {
         "action": str,
-        "contract_code": str,       # 可选，合同编号
-        "project_order_id": str,    # 可选，订单号
-        "encrypted_text": str,      # 可选，需要解密的密文
-        "business_type": int,       # 可选，业务类型
-        "gb_code": int,             # 可选，城市code
-        "company_code": str,        # 可选，分公司code
-        "version": int,             # 可选，版本号
-        "contract_type": int,       # 可选，合同类型
-        "form_id": int,             # 可选，版式ID
-        "page_num": int,            # 可选，页码
-        "page_size": int,           # 可选，每页大小
+        "contract_code": Optional[str],
+        "project_order_id": Optional[str],
+        "encrypted_text": Optional[str],
+        "business_type": Optional[int],
+        "gb_code": Optional[int],
+        "company_code": Optional[str],
+        "version": Optional[int],
+        "contract_type": Optional[int],
+        "form_id": Optional[int],
+        "page_num": Optional[int],
+        "page_size": Optional[int],
     },
 )
 async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
-    """查询 SRE 生产环境数据。
-
-    Args:
-        args: 查询参数
-
-    Returns:
-        查询结果
-    """
+    """查询 SRE 生产环境数据。"""
     action = args.get("action", "")
     if not action:
         return {
@@ -68,12 +78,16 @@ async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
     endpoint = ENDPOINT_MAP.get(action)
     if not endpoint:
         return {
-            "content": [{"type": "text", "text": f"未知的操作类型: {action}"}],
+            "content": [{"type": "text", "text": f"未知的操作类型: {action}。支持的类型：{', '.join(ENDPOINT_MAP.keys())}"}],
             "is_error": True,
         }
 
     # 构建查询参数
     params = {"app": "sreAgent"}
+
+    # 提取常用参数
+    contract_code = args.get("contract_code", "")
+    project_order_id = args.get("project_order_id", "")
 
     if action == "decrypt":
         encrypted_text = args.get("encrypted_text", "")
@@ -85,8 +99,6 @@ async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
         params["text"] = encrypted_text
 
     elif action == "contract":
-        contract_code = args.get("contract_code", "")
-        project_order_id = args.get("project_order_id", "")
         if not contract_code and not project_order_id:
             return {
                 "content": [{"type": "text", "text": "contract 操作需要 contract_code 或 project_order_id 参数"}],
@@ -98,19 +110,19 @@ async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
             params["projectOrderId"] = project_order_id
 
     elif action in ("contract_node", "contract_user", "contract_field", "contract_quotation", "contract_log"):
-        contract_code = args.get("contract_code", "")
         if not contract_code:
             return {
-                "content": [{"type": "text", "text": f"{action} 操作需要 contract_code 参数"}],
+                "content": [{"type": "text", "text": f"{action} 操作需要 contract_code 参数（以C开头的合同编号）"}],
                 "is_error": True,
             }
         params["contractCode"] = contract_code
+        if action == "contract_log" and args.get("log_type") is not None:
+            params["type"] = args["log_type"]
 
     elif action == "config_snap":
-        project_order_id = args.get("project_order_id", "")
         if not project_order_id:
             return {
-                "content": [{"type": "text", "text": "config_snap 操作需要 project_order_id 参数"}],
+                "content": [{"type": "text", "text": "config_snap 操作需要 project_order_id 参数（18位订单号）"}],
                 "is_error": True,
             }
         params["projectOrderId"] = project_order_id
@@ -155,6 +167,9 @@ async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
                 "is_error": True,
             }
         params["formId"] = form_id
+
+    # 清理参数
+    params = clean_params(params)
 
     # 执行查询
     try:
