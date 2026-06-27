@@ -5,36 +5,74 @@
 """
 
 import os
+import json
 import asyncio
 from typing import Optional, AsyncGenerator
-from claude_agent_sdk import query, ClaudeAgentOptions, create_sdk_mcp_server, AssistantMessage, TextBlock, ToolUseBlock, ResultMessage
+from claude_agent_sdk import (
+    query,
+    ClaudeAgentOptions,
+    create_sdk_mcp_server,
+    AssistantMessage,
+    TextBlock,
+    ThinkingBlock,
+    ToolUseBlock,
+    ToolResultBlock,
+    ResultMessage,
+)
 
 from ..tools import knowledge_search, sre_query
 
 
-# 工具图标和显示格式
-TOOL_DISPLAY = {
-    "Read": ("📄", lambda inp: inp.get("file_path", "")),
-    "Grep": ("🔍", lambda inp: f"{inp.get('pattern', '')} in {inp.get('path', '.')}"),
-    "Bash": ("💻", lambda inp: inp.get("command", "")),
-    "Glob": ("📁", lambda inp: inp.get("pattern", "")),
-    "Write": ("✏️", lambda inp: inp.get("file_path", "")),
-    "Edit": ("✏️", lambda inp: inp.get("file_path", "")),
-    "WebFetch": ("🌐", lambda inp: inp.get("url", "")),
-    "WebSearch": ("🔍", lambda inp: inp.get("query", "")),
+# 工具图标映射
+TOOL_ICONS = {
+    "Read": "📄",
+    "Grep": "🔍",
+    "Bash": "💻",
+    "Glob": "📁",
+    "Write": "✏️",
+    "Edit": "✏️",
+    "WebFetch": "🌐",
+    "WebSearch": "🔍",
 }
 
 
 def format_tool_use(tool: str, inp: dict) -> str:
-    """格式化工具调用信息"""
-    if tool in TOOL_DISPLAY:
-        icon, get_desc = TOOL_DISPLAY[tool]
-        desc = get_desc(inp)
-        return f"\n{icon} {tool}: {desc}\n"
+    """格式化工具调用信息（完整参数）"""
+    icon = TOOL_ICONS.get(tool, "🔧")
+
+    # 格式化参数
+    if inp:
+        params = []
+        for k, v in inp.items():
+            v_str = str(v)
+            # 截断过长的值
+            if len(v_str) > 200:
+                v_str = v_str[:200] + "..."
+            params.append(f"  {k}: {v_str}")
+        params_str = "\n".join(params)
+        return f"\n{icon} **{tool}**\n{params_str}\n"
     else:
-        # 未知工具，显示工具名和第一个参数
-        first_value = next(iter(inp.values()), "") if inp else ""
-        return f"\n🔧 {tool}: {first_value}\n"
+        return f"\n{icon} **{tool}**\n"
+
+
+def format_tool_result(content: str, is_error: bool = False) -> str:
+    """格式化工具执行结果"""
+    prefix = "❌" if is_error else "✅"
+
+    # 截断过长的结果
+    if len(content) > 1000:
+        content = content[:1000] + "\n... (结果已截断)"
+
+    return f"\n{prefix} **工具结果**\n{content}\n"
+
+
+def format_thinking(thinking: str) -> str:
+    """格式化思考过程"""
+    # 截断过长的思考
+    if len(thinking) > 500:
+        thinking = thinking[:500] + "\n... (思考已截断)"
+
+    return f"\n💭 **思考中...**\n{thinking}\n"
 
 
 class SignAgent:
@@ -45,6 +83,7 @@ class SignAgent:
         project_dir: str,
         api_config: Optional[dict] = None,
         system_prompt: Optional[str] = None,
+        debug: bool = False,
     ):
         """
         初始化签约助手
@@ -53,10 +92,12 @@ class SignAgent:
             project_dir: 签约系统项目目录
             api_config: API 配置，如果为 None 则使用默认配置
             system_prompt: 自定义系统提示词
+            debug: 是否开启 debug 模式（输出工具调用详情）
         """
         self.project_dir = project_dir
         self.api_config = api_config or self._default_api_config()
         self.system_prompt = system_prompt or self._default_system_prompt()
+        self.debug = debug
 
     def _default_api_config(self) -> dict:
         """默认 API 配置"""
@@ -161,11 +202,23 @@ class SignAgent:
                     if isinstance(block, TextBlock):
                         if block.text:  # 只输出非空文本
                             yield block.text
+
+                    elif isinstance(block, ThinkingBlock):
+                        # 思考过程（仅 debug 模式）
+                        if self.debug and block.thinking:
+                            yield format_thinking(block.thinking)
+
                     elif isinstance(block, ToolUseBlock):
-                        # 通用工具调用信息
-                        tool = block.name
-                        inp = block.input
-                        yield format_tool_use(tool, inp)
+                        # 工具调用信息（仅 debug 模式）
+                        if self.debug:
+                            yield format_tool_use(block.name, block.input)
+
+                    elif isinstance(block, ToolResultBlock):
+                        # 工具执行结果（仅 debug 模式）
+                        if self.debug:
+                            content = block.content if isinstance(block.content, str) else str(block.content)
+                            yield format_tool_result(content, block.is_error or False)
+
             elif isinstance(message, ResultMessage):
                 pass  # 跳过结果消息
 

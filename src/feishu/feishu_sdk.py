@@ -48,6 +48,8 @@ def init_agent():
     global agent
 
     project_dir = os.getenv("SIGN_AGENT_PROJECT_DIR", ".")
+    debug = os.getenv("DEBUG", "false").lower() == "true"
+
     api_config = {
         "ANTHROPIC_BASE_URL": os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
         "ANTHROPIC_AUTH_TOKEN": os.getenv("ANTHROPIC_AUTH_TOKEN", ""),
@@ -57,8 +59,8 @@ def init_agent():
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": os.getenv("ANTHROPIC_DEFAULT_HAIKU_MODEL", "claude-haiku-4-5-20251001"),
     }
 
-    agent = SignAgent(project_dir=project_dir, api_config=api_config)
-    logger.info("✅ SignAgent 初始化完成")
+    agent = SignAgent(project_dir=project_dir, api_config=api_config, debug=debug)
+    logger.info(f"✅ SignAgent 初始化完成 (debug={debug})")
 
 
 def handle_message(data: P2ImMessageReceiveV1) -> None:
