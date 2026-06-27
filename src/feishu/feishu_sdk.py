@@ -25,7 +25,7 @@ websockets.connect = _patched_connect
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
 
-from .agent import SignAgent
+from ..agent import SignAgent
 
 # 加载环境变量
 load_dotenv()

@@ -1,5 +1,3 @@
-"""签约助手 Agent 包"""
-
 from .agent import SignAgent
 
 __all__ = ["SignAgent"]

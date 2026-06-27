@@ -14,7 +14,7 @@ load_dotenv()
 # 添加 src 到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.feishu_sdk import start_feishu_sdk
+from src.feishu import start_feishu_sdk
 
 
 def main():

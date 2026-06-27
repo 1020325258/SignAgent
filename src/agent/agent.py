@@ -6,7 +6,9 @@
 
 import asyncio
 from typing import Optional, AsyncGenerator
-from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock, ToolUseBlock, ResultMessage
+from claude_agent_sdk import query, ClaudeAgentOptions, create_sdk_mcp_server, AssistantMessage, TextBlock, ToolUseBlock, ResultMessage
+
+from ..tools import knowledge_search, sre_query
 
 
 # 工具图标和显示格式
@@ -88,6 +90,27 @@ class SignAgent:
 - 提供准确的业务术语解释
 - 遇到不确定的问题，明确告知用户"""
 
+    def _create_mcp_servers(self) -> dict:
+        """创建 MCP 服务器配置。"""
+        # 创建知识库查询服务器
+        knowledge_server = create_sdk_mcp_server(
+            name="knowledge",
+            version="1.0.0",
+            tools=[knowledge_search],
+        )
+
+        # 创建 SRE 查询服务器
+        sre_server = create_sdk_mcp_server(
+            name="sre",
+            version="1.0.0",
+            tools=[sre_query],
+        )
+
+        return {
+            "knowledge": knowledge_server,
+            "sre": sre_server,
+        }
+
     async def chat(
         self,
         question: str,
@@ -106,8 +129,19 @@ class SignAgent:
         if allowed_tools is None:
             allowed_tools = ["Read", "Glob", "Grep", "Bash"]
 
+        # 添加 MCP 工具到允许列表
+        mcp_tools = [
+            "mcp__knowledge__knowledge_search",
+            "mcp__sre__sre_query",
+        ]
+        all_tools = allowed_tools + mcp_tools
+
+        # 创建 MCP 服务器
+        mcp_servers = self._create_mcp_servers()
+
         options = ClaudeAgentOptions(
-            allowed_tools=allowed_tools,
+            allowed_tools=all_tools,
+            mcp_servers=mcp_servers,
             permission_mode="acceptEdits",
             cwd=self.project_dir,
             system_prompt=self.system_prompt,
