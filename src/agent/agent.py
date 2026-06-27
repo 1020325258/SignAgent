@@ -21,7 +21,7 @@ from claude_agent_sdk import (
     ResultMessage,
 )
 
-from ..tools import knowledge_search, sre_query
+from ..tools import knowledge_search, sre_query, apollo_query
 
 
 # 工具图标映射
@@ -119,6 +119,7 @@ class SignAgent:
 
 1. `mcp__knowledge__knowledge_search(query)` — 搜索知识库
 2. `mcp__sre__sre_query(action, ...)` — 查询 SRE 生产环境数据
+3. `mcp__apollo__apollo_query(action, ...)` — 查询 Apollo 配置中心
 
 ## 参数识别
 
@@ -131,6 +132,14 @@ class SignAgent:
 2. 用 `contract_node` 查询流程节点
 3. 用 `contract_log` 查询操作日志
 4. 需要时用 `contract_user`/`contract_field` 查询详情
+
+## Apollo 配置查询
+
+当需要查询系统配置时，使用 apollo_query 工具：
+- `get`: 根据 key 查询单个配置值
+- `list`: 列出 namespace 下所有配置
+- `search`: 按关键字模糊搜索配置 key
+- `release`: 查询最新 release 信息
 
 详细用法参考 sre-troubleshoot 技能文档。"""
 
@@ -150,9 +159,17 @@ class SignAgent:
             tools=[sre_query],
         )
 
+        # 创建 Apollo 配置查询服务器
+        apollo_server = create_sdk_mcp_server(
+            name="apollo",
+            version="1.0.0",
+            tools=[apollo_query],
+        )
+
         return {
             "knowledge": knowledge_server,
             "sre": sre_server,
+            "apollo": apollo_server,
         }
 
     async def chat(
@@ -177,6 +194,7 @@ class SignAgent:
         mcp_tools = [
             "mcp__knowledge__knowledge_search",
             "mcp__sre__sre_query",
+            "mcp__apollo__apollo_query",
         ]
         all_tools = allowed_tools + mcp_tools
 
