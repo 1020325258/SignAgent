@@ -123,20 +123,24 @@ def handle_message(data: P2ImMessageReceiveV1) -> None:
 async def process_message(message_id: str, question: str):
     """处理消息并发送回复"""
     try:
-        # 调用 Agent 处理
-        all_chunks = []  # 所有输出块
+        # 先发送一条卡片消息
+        reply_message_id = await send_reply(message_id, "正在分析你的问题...", msg_type="interactive")
+        if not reply_message_id:
+            logger.error("发送初始消息失败")
+            return
 
+        # 收集输出并实时更新
+        full_answer = ""
         async for text in agent.chat(question=question):
-            all_chunks.append(text)
-            logger.info(f"收到输出: {text[:100]}...")  # 记录日志
+            full_answer += text
+            logger.info(f"收到输出: {text[:100]}...")
+            # 每次收到输出就更新卡片
+            await update_message(reply_message_id, full_answer, is_thinking=True)
 
-        # 构建完整回复
-        full_answer = "".join(all_chunks)
+        # 最终更新，去掉思考状态
+        await update_message(reply_message_id, full_answer, is_thinking=False)
 
-        logger.info(f"完整回复: {full_answer[:200]}...")  # 记录日志
-
-        # 发送回复
-        await send_reply(message_id, full_answer)
+        logger.info(f"完整回复: {full_answer[:200]}...")
 
     except Exception as e:
         logger.error(f"处理消息失败: {e}")
@@ -144,13 +148,63 @@ async def process_message(message_id: str, question: str):
         traceback.print_exc()
 
 
-async def send_reply(message_id: str, content: str):
+def build_card_content(content: str, is_thinking: bool = False) -> str:
+    """
+    构建飞书卡片内容
+
+    Args:
+        content: 消息内容
+        is_thinking: 是否为思考状态
+
+    Returns:
+        卡片 JSON 字符串
+    """
+    # 飞书卡片 markdown 不支持 # 标题，用 **粗体** 替代
+    # 转换标准 markdown 标题为粗体
+    import re
+    lines = content.split('\n')
+    processed_lines = []
+    for line in lines:
+        # 将 ## 标题 转换为 **标题**
+        if line.strip().startswith('#'):
+            # 去掉 # 号，加粗
+            title = re.sub(r'^#+\s*', '', line.strip())
+            processed_lines.append(f"**{title}**")
+        else:
+            processed_lines.append(line)
+    processed_content = '\n'.join(processed_lines)
+
+    # 构建卡片
+    card = {
+        "elements": [
+            {
+                "tag": "markdown",
+                "content": processed_content
+            }
+        ]
+    }
+
+    # 如果是思考状态，添加一个 loading 提示
+    if is_thinking:
+        card["elements"].insert(0, {
+            "tag": "markdown",
+            "content": "⏳ **正在思考中...**\n\n---\n"
+        })
+
+    return json.dumps(card)
+
+
+async def send_reply(message_id: str, content: str, msg_type: str = "text") -> str:
     """
     发送回复消息
 
     Args:
         message_id: 原始消息 ID
         content: 回复内容
+        msg_type: 消息类型，text 或 interactive
+
+    Returns:
+        回复消息的 message_id，失败返回 None
     """
     try:
         # 创建 Client
@@ -159,12 +213,18 @@ async def send_reply(message_id: str, content: str):
             .app_secret(FEISHU_APP_SECRET) \
             .build()
 
+        # 根据消息类型构造内容
+        if msg_type == "interactive":
+            card_content = build_card_content(content, is_thinking=True)
+        else:
+            card_content = json.dumps({"text": content})
+
         # 构造回复请求
         request = ReplyMessageRequest.builder() \
             .message_id(message_id) \
             .request_body(ReplyMessageRequestBody.builder()
-                .content(json.dumps({"text": content}))
-                .msg_type("text")
+                .content(card_content)
+                .msg_type(msg_type)
                 .build()) \
             .build()
 
@@ -172,12 +232,55 @@ async def send_reply(message_id: str, content: str):
         response = client.im.v1.message.reply(request)
 
         if response.success():
-            logger.info(f"回复发送成功: {message_id}")
+            reply_message_id = response.data.message_id
+            logger.info(f"回复发送成功: {reply_message_id}")
+            return reply_message_id
         else:
             logger.error(f"回复发送失败: {response.code} - {response.msg}")
+            return None
 
     except Exception as e:
         logger.error(f"发送回复失败: {e}")
+        return None
+
+
+async def update_message(message_id: str, content: str, is_thinking: bool = True):
+    """
+    更新消息内容（用于流式输出）
+
+    Args:
+        message_id: 要更新的消息 ID
+        content: 新的消息内容
+        is_thinking: 是否仍在思考中
+    """
+    try:
+        # 创建 Client
+        client = lark.Client.builder() \
+            .app_id(FEISHU_APP_ID) \
+            .app_secret(FEISHU_APP_SECRET) \
+            .build()
+
+        # 构建卡片内容
+        card_content = build_card_content(content, is_thinking=is_thinking)
+
+        # 构造更新请求
+        request = PatchMessageRequest.builder() \
+            .message_id(message_id) \
+            .request_body(PatchMessageRequestBody.builder()
+                .content(card_content)
+                .build()) \
+            .build()
+
+        # 更新消息
+        response = client.im.v1.message.patch(request)
+
+        if response.success():
+            logger.debug(f"消息更新成功: {message_id}")
+        else:
+            logger.error(f"消息更新失败: {response.code} - {response.msg}")
+
+    except Exception as e:
+        logger.error(f"更新消息失败: {e}")
 
 
 def start_feishu_sdk():

@@ -9,6 +9,31 @@ from typing import Optional, AsyncGenerator
 from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock, ToolUseBlock, ResultMessage
 
 
+# 工具图标和显示格式
+TOOL_DISPLAY = {
+    "Read": ("📄", lambda inp: inp.get("file_path", "")),
+    "Grep": ("🔍", lambda inp: f"{inp.get('pattern', '')} in {inp.get('path', '.')}"),
+    "Bash": ("💻", lambda inp: inp.get("command", "")),
+    "Glob": ("📁", lambda inp: inp.get("pattern", "")),
+    "Write": ("✏️", lambda inp: inp.get("file_path", "")),
+    "Edit": ("✏️", lambda inp: inp.get("file_path", "")),
+    "WebFetch": ("🌐", lambda inp: inp.get("url", "")),
+    "WebSearch": ("🔍", lambda inp: inp.get("query", "")),
+}
+
+
+def format_tool_use(tool: str, inp: dict) -> str:
+    """格式化工具调用信息"""
+    if tool in TOOL_DISPLAY:
+        icon, get_desc = TOOL_DISPLAY[tool]
+        desc = get_desc(inp)
+        return f"\n{icon} {tool}: {desc}\n"
+    else:
+        # 未知工具，显示工具名和第一个参数
+        first_value = next(iter(inp.values()), "") if inp else ""
+        return f"\n🔧 {tool}: {first_value}\n"
+
+
 class SignAgent:
     """签约系统智能助手"""
 
@@ -97,20 +122,12 @@ class SignAgent:
                         if block.text:  # 只输出非空文本
                             yield block.text
                     elif isinstance(block, ToolUseBlock):
-                        # 输出工具调用信息
+                        # 通用工具调用信息
                         tool = block.name
                         inp = block.input
-                        if tool == "Read":
-                            yield f"\n📄 读取文件: {inp.get('file_path', '')}\n"
-                        elif tool == "Grep":
-                            yield f"\n🔍 搜索: {inp.get('pattern', '')} in {inp.get('path', '.')}\n"
-                        elif tool == "Bash":
-                            yield f"\n💻 执行: {inp.get('command', '')}\n"
-                        elif tool == "Glob":
-                            yield f"\n📁 查找文件: {inp.get('pattern', '')}\n"
+                        yield format_tool_use(tool, inp)
             elif isinstance(message, ResultMessage):
-                if message.total_cost_usd:
-                    yield f"\n💰 本次花费: ${message.total_cost_usd:.4f}"
+                pass  # 跳过结果消息
 
     async def chat_and_print(self, question: str):
         """对话并直接打印结果"""
