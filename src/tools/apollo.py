@@ -104,14 +104,20 @@ async def apollo_get_latest_release(env: str, app_id: str, cluster: str, namespa
 如果在默认 namespace 中找不到配置，请尝试其他 namespace。
 
 【关键】Apollo 配置的 key 都是英文格式，如 'attach.config.ocrOpenCity'、'contract.trade.enabled' 等。
-不要使用中文作为 key 搜索。""",
+不要使用中文作为 key 搜索。
+
+【默认值】如果不传以下参数，会使用默认值：
+- env: PROD
+- app_id: utopia-nrs-sales-project
+- cluster: default
+- namespace: application""",
     {
         "action": str,
-        "env": Optional[str],
-        "app_id": Optional[str],
-        "cluster": Optional[str],
-        "namespace": Optional[str],
-        "key": Optional[str],
+        "env": str,
+        "app_id": str,
+        "cluster": str,
+        "namespace": str,
+        "key": str,
     },
 )
 async def apollo_query(args: dict[str, Any]) -> dict[str, Any]:
