@@ -123,11 +123,19 @@ async def apollo_query(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
         }
 
-    # 使用默认值
-    env = args.get("env") or APOLLO_DEFAULT_ENV
-    app_id = args.get("app_id") or APOLLO_DEFAULT_APP_ID
-    cluster = args.get("cluster") or APOLLO_DEFAULT_CLUSTER
-    namespace = args.get("namespace") or APOLLO_DEFAULT_NAMESPACE
+    # 使用默认值（处理 None 和空字符串）
+    env = args.get("env") or None
+    if not env:
+        env = APOLLO_DEFAULT_ENV
+    app_id = args.get("app_id") or None
+    if not app_id:
+        app_id = APOLLO_DEFAULT_APP_ID
+    cluster = args.get("cluster") or None
+    if not cluster:
+        cluster = APOLLO_DEFAULT_CLUSTER
+    namespace = args.get("namespace") or None
+    if not namespace:
+        namespace = APOLLO_DEFAULT_NAMESPACE
     key = args.get("key", "")
 
     logger.info("Apollo query: action=%s, env=%s, app_id=%s, namespace=%s, key=%s", action, env, app_id, namespace, key)
