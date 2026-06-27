@@ -94,17 +94,20 @@ class SignAgent:
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
-                        yield block.text
+                        if block.text:  # 只输出非空文本
+                            yield block.text
                     elif isinstance(block, ToolUseBlock):
-                        # 可以选择性地输出工具调用信息
+                        # 输出工具调用信息
                         tool = block.name
                         inp = block.input
                         if tool == "Read":
                             yield f"\n📄 读取文件: {inp.get('file_path', '')}\n"
                         elif tool == "Grep":
-                            yield f"\n🔍 搜索: {inp.get('pattern', '')}\n"
+                            yield f"\n🔍 搜索: {inp.get('pattern', '')} in {inp.get('path', '.')}\n"
                         elif tool == "Bash":
                             yield f"\n💻 执行: {inp.get('command', '')}\n"
+                        elif tool == "Glob":
+                            yield f"\n📁 查找文件: {inp.get('pattern', '')}\n"
             elif isinstance(message, ResultMessage):
                 if message.total_cost_usd:
                     yield f"\n💰 本次花费: ${message.total_cost_usd:.4f}"

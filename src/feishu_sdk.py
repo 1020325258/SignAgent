@@ -124,14 +124,19 @@ async def process_message(message_id: str, question: str):
     """处理消息并发送回复"""
     try:
         # 调用 Agent 处理
-        result = []
-        async for text in agent.chat(question=question):
-            result.append(text)
+        all_chunks = []  # 所有输出块
 
-        answer = "".join(result)
+        async for text in agent.chat(question=question):
+            all_chunks.append(text)
+            logger.info(f"收到输出: {text[:100]}...")  # 记录日志
+
+        # 构建完整回复
+        full_answer = "".join(all_chunks)
+
+        logger.info(f"完整回复: {full_answer[:200]}...")  # 记录日志
 
         # 发送回复
-        await send_reply(message_id, answer)
+        await send_reply(message_id, full_answer)
 
     except Exception as e:
         logger.error(f"处理消息失败: {e}")
