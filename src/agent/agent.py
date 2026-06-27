@@ -218,8 +218,16 @@ class SignAgent:
                 # 工具执行结果（仅 debug 模式）
                 if self.debug and message.tool_use_result:
                     result = message.tool_use_result
-                    content = result.get("content", "")
-                    is_error = result.get("is_error", False)
+                    # 处理不同类型的 tool_use_result
+                    if isinstance(result, dict):
+                        content = result.get("content", "")
+                        is_error = result.get("is_error", False)
+                    elif isinstance(result, str):
+                        content = result
+                        is_error = False
+                    else:
+                        content = str(result)
+                        is_error = False
                     if content:
                         yield format_tool_result(content, is_error)
 
