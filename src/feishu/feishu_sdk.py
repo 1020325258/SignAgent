@@ -205,7 +205,7 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
             elements.append({
                 "tag": "table",
                 "page_size": 10,
-                "row_height": "medium",
+                "row_height": "low",
                 "header_style": {
                     "text_align": "left",
                     "text_size": "normal",
