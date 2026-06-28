@@ -89,18 +89,28 @@ class SignAgent:
         Yields:
             助手的回复内容
         """
-        # 生成会话 ID
-        session_id = self.session_manager.generate_session_id(user_id)
+        # 获取或创建会话 ID
+        session_id = self.session_manager.get_or_create_session_id(user_id)
 
-        # 获取或创建客户端
+        # 检查是否是新会话（用于决定是否 resume）
+        is_new_session = not self.session_manager._is_session_valid(session_id)
+
+        # 创建客户端
         options = self._create_options()
-        client = await self.session_manager.get_client(session_id, options)
+        client = self.session_manager.create_client(
+            session_id=session_id,
+            options=options,
+            resume=not is_new_session,  # 如果不是新会话，则 resume
+        )
 
         # 跟踪是否有工具调用
         has_tool_calls = False
         is_first_text_after_tools = False
 
         try:
+            # 连接客户端
+            await client.connect()
+
             # 发送查询
             await client.query(question)
 
@@ -144,11 +154,17 @@ class SignAgent:
                     pass
 
             # 保存会话
-            self.session_manager.save_session(session_id, client)
+            self.session_manager.save_session(user_id, session_id)
 
         except Exception as e:
             logger.error(f"对话失败: {e}")
             raise
+        finally:
+            # 断开连接
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
 
     async def clear_memory(self, user_id: str) -> None:
         """
@@ -157,7 +173,5 @@ class SignAgent:
         Args:
             user_id: 用户标识
         """
-        session_id = self.session_manager.generate_session_id(user_id)
-        await self.session_manager.close_client(session_id)
-        self.session_manager.delete_session(session_id)
+        self.session_manager.delete_session(user_id)
         logger.info(f"已清除用户会话: {user_id}")
