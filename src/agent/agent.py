@@ -1,79 +1,22 @@
-"""
-签约助手 Agent
-
-基于 Claude Code SDK 实现的签约系统智能助手。
-"""
+# -*- coding: utf-8 -*-
+"""签约助手 Agent 核心模块。"""
 
 import os
-import json
-import asyncio
 from typing import Optional, AsyncGenerator
 from claude_agent_sdk import (
     query,
     ClaudeAgentOptions,
-    create_sdk_mcp_server,
     AssistantMessage,
     UserMessage,
     TextBlock,
     ThinkingBlock,
     ToolUseBlock,
-    ToolResultBlock,
     ResultMessage,
 )
 
-from ..tools import knowledge_search, sre_query, apollo_query
-
-
-# 工具图标映射
-TOOL_ICONS = {
-    "Read": "📄",
-    "Grep": "🔍",
-    "Bash": "💻",
-    "Glob": "📁",
-    "Write": "✏️",
-    "Edit": "✏️",
-    "WebFetch": "🌐",
-    "WebSearch": "🔍",
-}
-
-
-def format_tool_use(tool: str, inp: dict) -> str:
-    """格式化工具调用信息（完整参数）"""
-    icon = TOOL_ICONS.get(tool, "🔧")
-
-    # 格式化参数
-    if inp:
-        params = []
-        for k, v in inp.items():
-            v_str = str(v)
-            # 截断过长的值
-            if len(v_str) > 200:
-                v_str = v_str[:200] + "..."
-            params.append(f"  {k}: {v_str}")
-        params_str = "\n".join(params)
-        return f"\n{icon} **{tool}**\n{params_str}\n"
-    else:
-        return f"\n{icon} **{tool}**\n"
-
-
-def format_tool_result(content: str, is_error: bool = False) -> str:
-    """格式化工具执行结果"""
-    prefix = "❌" if is_error else "✅"
-
-    # 截断过长的结果
-    if len(content) > 1000:
-        content = content[:1000] + "\n... (结果已截断)"
-
-    return f"\n{prefix} **工具结果**\n{content}\n"
-
-
-def format_thinking(thinking: str) -> str:
-    """格式化思考过程"""
-    # 截断过长的思考
-    if len(thinking) > 500:
-        thinking = thinking[:500] + "\n... (思考已截断)"
-
-    return f"\n💭 **思考中...**\n{thinking}\n"
+from .config import get_default_api_config, get_default_system_prompt
+from .formatters import format_tool_use, format_tool_result, format_thinking
+from .mcp_factory import create_mcp_servers
 
 
 class SignAgent:
@@ -96,81 +39,9 @@ class SignAgent:
             debug: 是否开启 debug 模式（输出工具调用详情）
         """
         self.project_dir = project_dir
-        self.api_config = api_config or self._default_api_config()
-        self.system_prompt = system_prompt or self._default_system_prompt()
+        self.api_config = api_config or get_default_api_config()
+        self.system_prompt = system_prompt or get_default_system_prompt()
         self.debug = debug
-
-    def _default_api_config(self) -> dict:
-        """默认 API 配置"""
-        return {
-            "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
-            "ANTHROPIC_AUTH_TOKEN": "",  # 需要从环境变量或配置文件读取
-            "ANTHROPIC_MODEL": "claude-sonnet-4-6",
-            "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-6",
-            "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-8",
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5-20251001",
-        }
-
-    def _default_system_prompt(self) -> str:
-        """默认系统提示词"""
-        return """你是签约系统助手，帮助用户查询和排查签约系统问题。
-
-## 可用工具
-
-1. `mcp__knowledge__knowledge_search(query)` — 搜索知识库
-2. `mcp__sre__sre_query(action, ...)` — 查询 SRE 生产环境数据
-3. `mcp__apollo__apollo_query(action, ...)` — 查询 Apollo 配置中心
-
-## 参数识别
-
-- 合同编号：以 "C" 开头 + 数字（如 C1776759658764987）→ 使用 contract_code
-- 订单号：18 位纯数字（如 826041310000003912）→ 使用 project_order_id
-
-## 排查流程
-
-1. 先用 `contract` 查询合同基本信息
-2. 用 `contract_node` 查询流程节点
-3. 用 `contract_log` 查询操作日志
-4. 需要时用 `contract_user`/`contract_field` 查询详情
-
-## Apollo 配置查询
-
-当需要查询系统配置时，使用 apollo_query 工具：
-- `get`: 根据 key 查询单个配置值
-- `list`: 列出 namespace 下所有配置
-- `search`: 按关键字模糊搜索配置 key
-- `release`: 查询最新 release 信息
-
-详细用法参考 sre-troubleshoot 技能文档。"""
-
-    def _create_mcp_servers(self) -> dict:
-        """创建 MCP 服务器配置。"""
-        # 创建知识库查询服务器
-        knowledge_server = create_sdk_mcp_server(
-            name="knowledge",
-            version="1.0.0",
-            tools=[knowledge_search],
-        )
-
-        # 创建 SRE 查询服务器
-        sre_server = create_sdk_mcp_server(
-            name="sre",
-            version="1.0.0",
-            tools=[sre_query],
-        )
-
-        # 创建 Apollo 配置查询服务器
-        apollo_server = create_sdk_mcp_server(
-            name="apollo",
-            version="1.0.0",
-            tools=[apollo_query],
-        )
-
-        return {
-            "knowledge": knowledge_server,
-            "sre": sre_server,
-            "apollo": apollo_server,
-        }
 
     async def chat(
         self,
@@ -199,7 +70,7 @@ class SignAgent:
         all_tools = allowed_tools + mcp_tools
 
         # 创建 MCP 服务器
-        mcp_servers = self._create_mcp_servers()
+        mcp_servers = create_mcp_servers()
 
         # skills 目录
         skills_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "skills")
@@ -207,8 +78,8 @@ class SignAgent:
         options = ClaudeAgentOptions(
             allowed_tools=all_tools,
             mcp_servers=mcp_servers,
-            skills="all",  # 加载所有 skills
-            add_dirs=[skills_dir],  # 添加 skills 目录
+            skills="all",
+            add_dirs=[skills_dir],
             permission_mode="acceptEdits",
             cwd=self.project_dir,
             system_prompt=self.system_prompt,
@@ -220,24 +91,20 @@ class SignAgent:
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
-                        if block.text:  # 只输出非空文本
+                        if block.text:
                             yield block.text
 
                     elif isinstance(block, ThinkingBlock):
-                        # 思考过程（仅 debug 模式）
                         if self.debug and block.thinking:
                             yield format_thinking(block.thinking)
 
                     elif isinstance(block, ToolUseBlock):
-                        # 工具调用信息（仅 debug 模式）
                         if self.debug:
                             yield format_tool_use(block.name, block.input)
 
             elif isinstance(message, UserMessage):
-                # 工具执行结果（仅 debug 模式）
                 if self.debug and message.tool_use_result:
                     result = message.tool_use_result
-                    # 处理不同类型的 tool_use_result
                     if isinstance(result, dict):
                         content = result.get("content", "")
                         is_error = result.get("is_error", False)
@@ -251,58 +118,10 @@ class SignAgent:
                         yield format_tool_result(content, is_error)
 
             elif isinstance(message, ResultMessage):
-                pass  # 跳过结果消息
+                pass
 
     async def chat_and_print(self, question: str):
         """对话并直接打印结果"""
         async for text in self.chat(question):
             print(text, end="", flush=True)
-        print()  # 换行
-
-    async def analyze_contract(self, contract_type: str) -> str:
-        """
-        分析特定类型的合同模板
-
-        Args:
-            contract_type: 合同类型
-
-        Returns:
-            分析结果
-        """
-        question = f"请分析签约系统中 {contract_type} 类型的合同模板，包括：1. 模板结构 2. 关键字段 3. 业务规则 4. 签约流程"
-        result = []
-        async for text in self.chat(question):
-            result.append(text)
-        return "".join(result)
-
-    async def explain_sign_flow(self, flow_name: str) -> str:
-        """
-        解释签约流程
-
-        Args:
-            flow_name: 流程名称
-
-        Returns:
-            流程解释
-        """
-        question = f"请详细解释签约系统中的 {flow_name} 流程，包括：1. 流程步骤 2. 参与角色 3. 状态流转 4. 异常处理"
-        result = []
-        async for text in self.chat(question):
-            result.append(text)
-        return "".join(result)
-
-    async def troubleshoot(self, issue_description: str) -> str:
-        """
-        排查签约问题
-
-        Args:
-            issue_description: 问题描述
-
-        Returns:
-            排查结果和建议
-        """
-        question = f"签约系统遇到以下问题，请帮我排查：\n{issue_description}\n\n请分析可能的原因并提供解决方案。"
-        result = []
-        async for text in self.chat(question):
-            result.append(text)
-        return "".join(result)
+        print()
