@@ -6,10 +6,13 @@ from typing import Any, Optional
 import httpx
 from claude_agent_sdk import tool
 
+from config import get_sre_config
+
 logger = logging.getLogger(__name__)
 
-# SRE 服务配置
-SRE_BASE_URL = "http://preview.i.nrs-sales-project.home.ke.com"
+# 加载配置
+_config = get_sre_config()
+SRE_BASE_URL = _config.get("base_url", "http://preview.i.nrs-sales-project.home.ke.com")
 
 # action 到 API endpoint 的映射
 ENDPOINT_MAP = {

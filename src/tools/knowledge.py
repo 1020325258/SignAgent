@@ -7,16 +7,19 @@ from typing import Any
 import httpx
 from claude_agent_sdk import tool
 
+from config import get_knowledge_config
+
 logger = logging.getLogger(__name__)
 
-# Ke-RAG 服务配置（与 milo-v2 保持一致）
-KE_RAG_BASE_URL = "https://openapi-ait.ke.com/v1"
+# 加载配置
+_config = get_knowledge_config()
+KE_RAG_BASE_URL = _config.get("base_url", "https://openapi-ait.ke.com/v1")
 KE_RAG_API_KEY = os.getenv("KE_RAG_API_KEY", "")
-KE_RAG_SPACE_ID = os.getenv("KE_RAG_SPACE_ID", "be5fb25a-7ce8-4268-a7ac-cc90010bf976")
-KE_RAG_SPACE_TYPE = os.getenv("KE_RAG_SPACE_TYPE", "space")
-KE_RAG_USER_ID = os.getenv("KE_RAG_USER_ID", "1000000030973949")
-KE_RAG_MODE = os.getenv("KE_RAG_MODE", "normal")
-KE_RAG_LIMIT = int(os.getenv("KE_RAG_LIMIT", "20"))
+KE_RAG_SPACE_ID = _config.get("space_id", "be5fb25a-7ce8-4268-a7ac-cc90010bf976")
+KE_RAG_SPACE_TYPE = _config.get("space_type", "space")
+KE_RAG_USER_ID = _config.get("user_id", "1000000030973949")
+KE_RAG_MODE = _config.get("mode", "normal")
+KE_RAG_LIMIT = _config.get("limit", 20)
 
 
 @tool(

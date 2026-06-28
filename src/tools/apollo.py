@@ -7,15 +7,18 @@ from typing import Any, Optional
 import httpx
 from claude_agent_sdk import tool
 
+from config import get_apollo_config
+
 logger = logging.getLogger(__name__)
 
-# Apollo 配置（固定值，与 milo-v2 一致）
-APOLLO_BASE_URL = "http://apollo.portal.life.ke.com"
-APOLLO_TOKEN = "a280f70eea76d4948a90e94819306e3b3fc9a875d969e499ddc78f70845dcfed"
-APOLLO_ENV = "PROD"
-APOLLO_APP_ID = "utopia-nrs-sales-project"
-APOLLO_CLUSTER = "default"
-APOLLO_DEFAULT_NAMESPACE = "application"
+# 加载配置
+_config = get_apollo_config()
+APOLLO_BASE_URL = _config.get("base_url", "http://apollo.portal.life.ke.com")
+APOLLO_TOKEN = _config.get("token", "")
+APOLLO_ENV = _config.get("env", "PROD")
+APOLLO_APP_ID = _config.get("app_id", "utopia-nrs-sales-project")
+APOLLO_CLUSTER = _config.get("cluster", "default")
+APOLLO_DEFAULT_NAMESPACE = _config.get("default_namespace", "application")
 
 
 async def apollo_get(url: str) -> Any:

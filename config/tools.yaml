@@ -1,0 +1,22 @@
+# MCP 工具配置
+
+apollo:
+  base_url: "http://apollo.portal.life.ke.com"
+  token: "a280f70eea76d4948a90e94819306e3b3fc9a875d969e499ddc78f70845dcfed"
+  env: "PROD"
+  app_id: "utopia-nrs-sales-project"
+  cluster: "default"
+  default_namespace: "application"
+
+sre:
+  base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+  app: "sreAgent"
+  timeout: 30
+
+knowledge:
+  base_url: "https://openapi-ait.ke.com/v1"
+  space_id: "be5fb25a-7ce8-4268-a7ac-cc90010bf976"
+  space_type: "space"
+  user_id: "1000000030973949"
+  mode: "normal"
+  limit: 20
