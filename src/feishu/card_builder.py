@@ -54,7 +54,9 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
                 row_data = {}
                 for i, cell in enumerate(row):
                     if i < len(table_headers):
-                        row_data[f"col_{i}"] = cell
+                        # 去掉单元格中的 ** 粗体标记（飞书表格不支持 markdown）
+                        clean_cell = cell.replace('**', '')
+                        row_data[f"col_{i}"] = clean_cell
                 rows.append(row_data)
 
             elements.append({
