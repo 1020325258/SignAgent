@@ -14,11 +14,15 @@ from .sender import send_reply, update_message
 
 logger = logging.getLogger(__name__)
 
+# 清除记忆的命令
+CLEAR_MEMORY_COMMANDS = ["清除记忆", "清除会话", "重新开始", "重置对话"]
+
 
 def init_agent() -> SignAgent:
     """初始化 SignAgent。"""
     project_dir = os.getenv("SIGN_AGENT_PROJECT_DIR", ".")
     debug = os.getenv("DEBUG", "false").lower() == "true"
+    session_dir = os.getenv("SESSION_DIR", "./sessions")
 
     api_config = {
         "ANTHROPIC_BASE_URL": os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
@@ -29,7 +33,12 @@ def init_agent() -> SignAgent:
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": os.getenv("ANTHROPIC_DEFAULT_HAIKU_MODEL", "claude-haiku-4-5-20251001"),
     }
 
-    agent = SignAgent(project_dir=project_dir, api_config=api_config, debug=debug)
+    agent = SignAgent(
+        project_dir=project_dir,
+        api_config=api_config,
+        debug=debug,
+        session_dir=session_dir,
+    )
     logger.info(f"✅ SignAgent 初始化完成 (debug={debug})")
     return agent
 
@@ -51,6 +60,7 @@ def handle_message(agent: SignAgent, data: P2ImMessageReceiveV1) -> None:
         message_type = message.message_type
         content = message.content
         message_id = message.message_id
+        user_id = sender.sender_id.open_id
 
         # 只处理文本消息
         if message_type != "text":
@@ -71,7 +81,7 @@ def handle_message(agent: SignAgent, data: P2ImMessageReceiveV1) -> None:
         if not question:
             return
 
-        logger.info(f"收到消息: {question}")
+        logger.info(f"收到消息: {question}, 用户: {user_id}")
 
         # 在新线程中运行异步任务
         import threading
@@ -79,7 +89,7 @@ def handle_message(agent: SignAgent, data: P2ImMessageReceiveV1) -> None:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(process_message(agent, message_id, question))
+                loop.run_until_complete(process_message(agent, message_id, question, user_id))
             finally:
                 loop.close()
 
@@ -92,9 +102,23 @@ def handle_message(agent: SignAgent, data: P2ImMessageReceiveV1) -> None:
         traceback.print_exc()
 
 
-async def process_message(agent: SignAgent, message_id: str, question: str):
-    """处理消息并发送回复。"""
+async def process_message(agent: SignAgent, message_id: str, question: str, user_id: str):
+    """
+    处理消息并发送回复。
+
+    Args:
+        agent: SignAgent 实例
+        message_id: 消息 ID
+        question: 用户问题
+        user_id: 用户标识
+    """
     try:
+        # 检查是否是清除记忆命令
+        if question.strip() in CLEAR_MEMORY_COMMANDS:
+            await agent.clear_memory(user_id)
+            await send_reply(message_id, "✅ 记忆已清除，我们重新开始吧！")
+            return
+
         # 先发送一条卡片消息
         reply_message_id = await send_reply(message_id, "正在分析你的问题...", msg_type="interactive")
         if not reply_message_id:
@@ -103,7 +127,7 @@ async def process_message(agent: SignAgent, message_id: str, question: str):
 
         # 收集输出并实时更新
         full_answer = ""
-        async for text in agent.chat(question=question):
+        async for text in agent.chat(question=question, user_id=user_id):
             full_answer += text
             logger.info(f"收到输出: {text[:100]}...")
             # 每次收到输出就更新卡片
