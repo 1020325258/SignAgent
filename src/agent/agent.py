@@ -87,11 +87,19 @@ class SignAgent:
             max_turns=30,
         )
 
+        # 跟踪是否有工具调用（用于在最终结果前添加分隔线）
+        has_tool_calls = False
+        is_first_text_after_tools = False
+
         async for message in query(prompt=question, options=options):
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         if block.text:
+                            # 在 debug 模式下，如果有工具调用，在最终结果前添加分隔线
+                            if self.debug and has_tool_calls and is_first_text_after_tools:
+                                yield "\n---\n\n📋 **最终结果**\n\n"
+                                is_first_text_after_tools = False
                             yield block.text
 
                     elif isinstance(block, ThinkingBlock):
@@ -100,6 +108,8 @@ class SignAgent:
 
                     elif isinstance(block, ToolUseBlock):
                         if self.debug:
+                            has_tool_calls = True
+                            is_first_text_after_tools = True
                             yield format_tool_use(block.name, block.input)
 
             elif isinstance(message, UserMessage):
