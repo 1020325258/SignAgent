@@ -2,9 +2,21 @@
 """飞书客户端初始化模块。"""
 
 import os
+import ssl
 import logging
+import websockets
 
 from dotenv import load_dotenv
+
+# 禁用 SSL 验证（解决自签名证书问题）
+ssl._create_default_https_context = ssl._create_unverified_context
+
+# 猴子补丁 websockets 库的 SSL 验证
+_original_connect = websockets.connect
+async def _patched_connect(*args, **kwargs):
+    kwargs.setdefault('ssl', ssl._create_unverified_context())
+    return await _original_connect(*args, **kwargs)
+websockets.connect = _patched_connect
 
 load_dotenv()
 
