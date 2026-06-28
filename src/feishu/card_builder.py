@@ -5,6 +5,39 @@ import json
 import re
 
 
+def clean_markdown(text: str) -> str:
+    """
+    清理 markdown 格式（飞书表格不支持 markdown 语法）
+
+    Args:
+        text: 包含 markdown 格式的文本
+
+    Returns:
+        清理后的纯文本
+    """
+    # 去掉粗体 **text** 或 __text__
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    text = re.sub(r'__(.*?)__', r'\1', text)
+
+    # 去掉斜体 *text* 或 _text_
+    text = re.sub(r'\*(.*?)\*', r'\1', text)
+    text = re.sub(r'(?<!\w)_(.*?)_(?!\w)', r'\1', text)
+
+    # 去掉删除线 ~~text~~
+    text = re.sub(r'~~(.*?)~~', r'\1', text)
+
+    # 去掉行内代码 `text`
+    text = re.sub(r'`(.*?)`', r'\1', text)
+
+    # 去掉链接 [text](url)，保留文本
+    text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+
+    # 去掉图片 ![alt](url)
+    text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
+
+    return text.strip()
+
+
 def build_card_content(content: str, is_thinking: bool = False) -> str:
     """
     构建飞书卡片内容
@@ -40,8 +73,8 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
             # 构建飞书 Table 组件
             columns = []
             for i, header in enumerate(table_headers):
-                # 去掉表头中的 ** 粗体标记（飞书表格 display_name 不支持 markdown）
-                clean_header = header.replace('**', '')
+                # 清理表头中的 markdown 格式
+                clean_header = clean_markdown(header)
                 columns.append({
                     "name": f"col_{i}",
                     "display_name": clean_header,
@@ -54,8 +87,8 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
                 row_data = {}
                 for i, cell in enumerate(row):
                     if i < len(table_headers):
-                        # 去掉单元格中的 ** 粗体标记（飞书表格不支持 markdown）
-                        clean_cell = cell.replace('**', '')
+                        # 清理 markdown 格式（飞书表格不支持）
+                        clean_cell = clean_markdown(cell)
                         row_data[f"col_{i}"] = clean_cell
                 rows.append(row_data)
 
