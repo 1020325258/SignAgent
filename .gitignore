@@ -33,5 +33,7 @@ Thumbs.db
 node_modules/
 
 # Claude Code
-.claude/
+.claude/commands/
+.claude/plans/
+.claude/projects/
 sessions/
