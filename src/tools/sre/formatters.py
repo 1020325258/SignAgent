@@ -72,18 +72,39 @@ def format_list(action: str, data: list) -> str:
 
     keys = list(data[0].keys())
 
-    # 如果字段太多（>6），只展示关键字段
-    MAX_COLUMNS = 6
+    # 如果字段太多，只展示关键字段
+    MAX_COLUMNS = 8
+
+    # 针对不同 action 的关键字段
+    KEY_FIELDS = {
+        "field_config": ["id", "moduleKey", "fieldKey", "fieldName", "description", "required", "disabled"],
+        "contract": ["contractCode", "status", "type", "businessType", "amount", "ctime"],
+        "contract_node": ["nodeType", "fireTime"],
+        "contract_user": ["roleType", "name", "phone", "isSign"],
+        "contract_log": ["type", "content", "remark", "ctime"],
+    }
+
     if len(keys) > MAX_COLUMNS:
-        # 优先展示有含义的字段
-        key_scores = []
-        for key in keys:
-            meaning = get_field_meaning(action, key)
-            score = 2 if meaning and meaning[0] else (1 if key in ["id", "fieldKey", "fieldName", "moduleKey", "name"] else 0)
-            key_scores.append((key, score))
-        # 按分数排序，取前 MAX_COLUMNS 个
-        key_scores.sort(key=lambda x: -x[1])
-        keys = [k for k, _ in key_scores[:MAX_COLUMNS]]
+        # 优先使用 action 专属的关键字段
+        if action in KEY_FIELDS:
+            preferred = KEY_FIELDS[action]
+            keys = [k for k in preferred if k in keys]
+            # 如果关键字段不够，补充有含义的字段
+            if len(keys) < MAX_COLUMNS:
+                for key in data[0].keys():
+                    if key not in keys and len(keys) < MAX_COLUMNS:
+                        meaning = get_field_meaning(action, key)
+                        if meaning and meaning[0]:
+                            keys.append(key)
+        else:
+            # 通用逻辑：优先展示有含义的字段
+            key_scores = []
+            for key in keys:
+                meaning = get_field_meaning(action, key)
+                score = 2 if meaning and meaning[0] else (1 if key in ["id", "name", "key"] else 0)
+                key_scores.append((key, score))
+            key_scores.sort(key=lambda x: -x[1])
+            keys = [k for k, _ in key_scores[:MAX_COLUMNS]]
 
     lines = [f"## 查询结果 ({len(data)} 条)\n"]
 
