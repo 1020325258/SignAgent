@@ -242,8 +242,12 @@ apis:
         description: "每页大小"
         api_key: pageSize
     response:
-      type: object
-      data_path: data
+      type: list
+      data_path: data.data  # 分页结构，实际数据在 data.data
+      pagination:
+        total_path: data.total
+        page_path: data.pageNum
+        pages_path: data.pages
 
   protocol_config:
     name: 查询协议配置
