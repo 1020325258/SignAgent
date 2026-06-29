@@ -15,20 +15,24 @@ logger = logging.getLogger(__name__)
 _config = get_sre_config()
 SRE_BASE_URL = _config.get("base_url", "http://preview.i.nrs-sales-project.home.ke.com")
 
-# action 到 API endpoint 的映射
-ENDPOINT_MAP = {
-    "decrypt": "/sre/decrypt",
-    "contract": "/sre/contract",
-    "contract_node": "/sre/contract-node",
-    "contract_user": "/sre/contract-user",
-    "contract_field": "/sre/contract-field",
-    "contract_quotation": "/sre/contract-quotation-relation",
-    "config_snap": "/sre/project-config-snap",
-    "city_company_info": "/sre/contract-city-company-info",
-    "contract_log": "/sre/contract-log",
-    "field_config": "/sre/field-config",
-    "protocol_config": "/sre/protocol-config",
-    "dim_combos": "/sre/field-config-dim-combos",
+# action 到 API 配置的映射
+# 格式: {"base_url": "...", "endpoint": "..."}
+API_CONFIGS = {
+    # SRE 后端接口
+    "decrypt": {"base_url": SRE_BASE_URL, "endpoint": "/sre/decrypt"},
+    "contract": {"base_url": SRE_BASE_URL, "endpoint": "/sre/contract"},
+    "contract_node": {"base_url": SRE_BASE_URL, "endpoint": "/sre/contract-node"},
+    "contract_user": {"base_url": SRE_BASE_URL, "endpoint": "/sre/contract-user"},
+    "contract_field": {"base_url": SRE_BASE_URL, "endpoint": "/sre/contract-field"},
+    "contract_quotation": {"base_url": SRE_BASE_URL, "endpoint": "/sre/contract-quotation-relation"},
+    "config_snap": {"base_url": SRE_BASE_URL, "endpoint": "/sre/project-config-snap"},
+    "city_company_info": {"base_url": SRE_BASE_URL, "endpoint": "/sre/contract-city-company-info"},
+    "contract_log": {"base_url": SRE_BASE_URL, "endpoint": "/sre/contract-log"},
+    "field_config": {"base_url": SRE_BASE_URL, "endpoint": "/sre/field-config"},
+    "protocol_config": {"base_url": SRE_BASE_URL, "endpoint": "/sre/protocol-config"},
+    "dim_combos": {"base_url": SRE_BASE_URL, "endpoint": "/sre/field-config-dim-combos"},
+    # 用户系统接口
+    "user-phone-query": {"base_url": "http://i.cms.home.ke.com", "endpoint": "/api/operate/user-phone"},
 }
 
 # ── 字段含义映射 ──────────────────────────────────────────────
@@ -151,7 +155,7 @@ def clean_params(params: dict) -> dict:
 
 @tool(
     "sre_query",
-    """查询 SRE 生产环境数据，用于排查线上问题。
+    """查询系统数据，用于排查线上问题。
 
 支持的 action 类型：
 - contract: 查询合同信息（需要 contract_code 或 project_order_id）
@@ -162,15 +166,18 @@ def clean_params(params: dict) -> dict:
 - config_snap: 查询配置快照（需要 project_order_id）
 - decrypt: 解密敏感信息（需要 encrypted_text）
 - field_config: 查询字段配置（需要 business_type, gb_code, company_code, contract_type, version）
+- user-phone-query: 根据手机号查询用户ID（需要 phone）
 
 参数格式：
 - contract_code: 合同编号，以 "C" 开头 + 数字，如 C1776759658764987
-- project_order_id: 订单号，18位纯数字，如 826041310000003912""",
+- project_order_id: 订单号，18位纯数字，如 826041310000003912
+- phone: 手机号，11位数字，如 15524175708""",
     {
         "action": str,
         "contract_code": Optional[str],
         "project_order_id": Optional[str],
         "encrypted_text": Optional[str],
+        "phone": Optional[str],
         "business_type": Optional[int],
         "gb_code": Optional[int],
         "company_code": Optional[str],
@@ -182,7 +189,7 @@ def clean_params(params: dict) -> dict:
     },
 )
 async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
-    """查询 SRE 生产环境数据。"""
+    """查询系统数据。"""
     action = args.get("action", "")
     if not action:
         return {
@@ -190,16 +197,19 @@ async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
         }
 
-    # 获取 endpoint
-    endpoint = ENDPOINT_MAP.get(action)
-    if not endpoint:
+    # 获取 API 配置
+    api_config = API_CONFIGS.get(action)
+    if not api_config:
         return {
-            "content": [{"type": "text", "text": f"未知的操作类型: {action}。支持的类型：{', '.join(ENDPOINT_MAP.keys())}"}],
+            "content": [{"type": "text", "text": f"未知的操作类型: {action}。支持的类型：{', '.join(API_CONFIGS.keys())}"}],
             "is_error": True,
         }
 
     # 构建查询参数
-    params = {"app": "sreAgent"}
+    params = {}
+    # SRE 接口需要 app 参数
+    if api_config["base_url"] == SRE_BASE_URL:
+        params["app"] = "sreAgent"
 
     # 提取常用参数
     contract_code = args.get("contract_code", "")
@@ -284,38 +294,64 @@ async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
             }
         params["formId"] = form_id
 
+    elif action == "user-phone-query":
+        phone = args.get("phone", "")
+        if not phone:
+            return {
+                "content": [{"type": "text", "text": "user-phone-query 操作需要 phone 参数（手机号）"}],
+                "is_error": True,
+            }
+        params["bizId"] = phone
+        params["pageSize"] = 50
+        params["currentPage"] = 1
+
     # 清理参数
     params = clean_params(params)
 
     # 执行查询
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            url = f"{SRE_BASE_URL}{endpoint}"
+            url = f"{api_config['base_url']}{api_config['endpoint']}"
             logger.info("SRE query: action=%s, url=%s, params=%s", action, url, params)
 
             response = await client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
 
-            # 检查响应
-            if not data.get("success"):
-                message = data.get("message", "查询失败")
+            # 根据不同的 action 处理响应
+            if action == "user-phone-query":
+                # 用户查询接口的响应格式
+                result_data = data.get("data", {})
+                user_list = result_data.get("list", [])
+                if not user_list:
+                    return {
+                        "content": [{"type": "text", "text": f"未找到手机号 {args.get('phone')} 对应的用户"}],
+                    }
+                user = user_list[0]
+                formatted = f"## 查询结果\n\n- **用户ID**: {user.get('userId', '未知')}\n- **用户名**: {user.get('userName', '未知')}\n- **手机号**: {user.get('phone', '未知')}"
                 return {
-                    "content": [{"type": "text", "text": f"查询失败: {message}"}],
-                    "is_error": True,
+                    "content": [{"type": "text", "text": formatted}],
                 }
+            else:
+                # SRE 接口的响应格式
+                if not data.get("success"):
+                    message = data.get("message", "查询失败")
+                    return {
+                        "content": [{"type": "text", "text": f"查询失败: {message}"}],
+                        "is_error": True,
+                    }
 
-            result_data = data.get("data")
-            if result_data is None:
+                result_data = data.get("data")
+                if result_data is None:
+                    return {
+                        "content": [{"type": "text", "text": "查询结果为空"}],
+                    }
+
+                # 格式化结果
+                formatted = format_sre_result(action, result_data)
                 return {
-                    "content": [{"type": "text", "text": "查询结果为空"}],
+                    "content": [{"type": "text", "text": formatted}],
                 }
-
-            # 格式化结果
-            formatted = format_sre_result(action, result_data)
-            return {
-                "content": [{"type": "text", "text": formatted}],
-            }
 
     except httpx.TimeoutException:
         return {
