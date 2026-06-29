@@ -76,7 +76,38 @@ def validate_params(action: str, args: Dict[str, Any], api_config: Dict[str, Any
     return None
 
 
-async def handle_request(action: str, args: Dict[str, Any]) -> Dict[str, Any]:
+def extract_data(data: Dict[str, Any], api_config: Dict[str, Any]) -> Any:
+    """从响应中提取数据。
+
+    Args:
+        data: API 响应数据
+        api_config: API 配置
+
+    Returns:
+        提取后的数据
+    """
+    response_config = api_config.get("response", {})
+    data_path = response_config.get("data_path", "data")
+
+    # 检查 success 字段（SRE 接口）
+    if "success" in data:
+        if not data["success"]:
+            message = data.get("message", "查询失败")
+            raise ValueError(f"查询失败: {message}")
+
+    # 按路径提取数据
+    parts = data_path.split(".")
+    result = data
+    for part in parts:
+        if isinstance(result, dict):
+            result = result.get(part)
+        else:
+            return None
+
+    return result
+
+
+async def handle_request(action: str, args: Dict[str, Any]) -> Any:
     """处理请求。
 
     Args:
@@ -84,7 +115,7 @@ async def handle_request(action: str, args: Dict[str, Any]) -> Dict[str, Any]:
         args: 用户输入参数
 
     Returns:
-        API 响应数据
+        提取后的数据
 
     Raises:
         ValueError: 参数验证失败或未知的 action
@@ -111,4 +142,7 @@ async def handle_request(action: str, args: Dict[str, Any]) -> Dict[str, Any]:
 
     data = await call_api(url, method, params)
 
-    return data
+    # 提取数据
+    extracted = extract_data(data, api_config)
+
+    return extracted

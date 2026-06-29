@@ -5,8 +5,8 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from src.tools.sre.handlers import handle_request, validate_params, build_params
-from src.tools.sre.formatters import format_result, format_user_info, translate_enum
+from src.tools.sre.handlers import handle_request, validate_params, build_params, extract_data
+from src.tools.sre.formatters import format_result, translate_enum
 from src.tools.sre.config import get_api_config, get_available_actions
 
 
@@ -163,18 +163,6 @@ class TestFormatters:
         assert "C456" in result
         assert "2 条" in result
 
-    def test_format_user_info(self):
-        """测试用户信息格式化。"""
-        data = [{"userId": "ucid_123", "userName": "张三", "phone": "15524175708"}]
-        result = format_user_info(data)
-        assert "ucid_123" in result
-        assert "张三" in result
-
-    def test_format_user_info_empty(self):
-        """测试空用户信息格式化。"""
-        result = format_user_info([])
-        assert "未找到" in result
-
     def test_translate_enum(self):
         """测试枚举值翻译。"""
         result = translate_enum("ContractStatusEnum", 5)
@@ -219,8 +207,9 @@ class TestHandleRequest:
             "contract_code": "C123"
         })
 
-        assert result["success"] is True
-        assert result["data"]["contractCode"] == "C123"
+        # handle_request 现在返回提取后的数据
+        assert result["contractCode"] == "C123"
+        assert result["status"] == 5
         mock_call_api.assert_called_once()
 
     @pytest.mark.asyncio
@@ -238,8 +227,9 @@ class TestHandleRequest:
             "phone": "15524175708"
         })
 
-        assert "data" in result
-        assert result["data"]["list"][0]["userId"] == "ucid_123"
+        # 返回的是 data.list
+        assert len(result) == 1
+        assert result[0]["userId"] == "ucid_123"
 
     @pytest.mark.asyncio
     @patch("src.tools.sre.handlers.call_api")
@@ -255,8 +245,9 @@ class TestHandleRequest:
             "contract_code": "C123"
         })
 
-        assert result["success"] is True
-        assert len(result["data"]) == 2
+        # 返回的是 data 列表
+        assert len(result) == 2
+        assert result[0]["nodeType"] == 1
 
     @pytest.mark.asyncio
     @patch("src.tools.sre.handlers.call_api")
@@ -272,8 +263,8 @@ class TestHandleRequest:
             "encrypted_text": "encrypted_xxx"
         })
 
-        assert result["success"] is True
-        assert result["data"] == "13800138000"
+        # 返回的是 data
+        assert result == "13800138000"
 
 
 # ── 集成测试 ──────────────────────────────────────────────────
@@ -301,9 +292,10 @@ class TestIntegration:
             "action": "user-phone-query",
             "phone": "15524175708"
         })
-        assert "data" in result
-        formatted = format_user_info(result["data"]["list"])
-        assert "用户ID" in formatted
+        assert result is not None
+        assert len(result) > 0
+        formatted = format_result("user-phone-query", result)
+        assert "userId" in formatted
 
 
 if __name__ == "__main__":

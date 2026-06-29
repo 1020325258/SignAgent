@@ -6,9 +6,8 @@ from typing import Any, Optional
 
 from claude_agent_sdk import tool
 
-from .config import get_api_config, get_available_actions
 from .handlers import handle_request
-from .formatters import format_result, format_user_info
+from .formatters import format_result
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +62,17 @@ async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
         }
 
     try:
-        # 处理请求
+        # 处理请求（已包含数据提取）
         data = await handle_request(action, args)
 
+        # 检查空结果
+        if data is None:
+            return {
+                "content": [{"type": "text", "text": "查询结果为空"}],
+            }
+
         # 格式化结果
-        api_config = get_api_config(action)
-        if api_config and api_config.get("response", {}).get("format") == "user_info":
-            # 用户查询接口特殊处理
-            formatted = format_user_info(data if isinstance(data, list) else [data])
-        else:
-            formatted = format_result(action, data)
+        formatted = format_result(action, data)
 
         return {
             "content": [{"type": "text", "text": formatted}],

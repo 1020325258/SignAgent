@@ -126,15 +126,3 @@ def format_object(action: str, data: dict) -> str:
     return "\n".join(lines)
 
 
-def format_user_info(data: list) -> str:
-    """格式化用户查询结果。"""
-    if not data:
-        return "未找到对应的用户"
-
-    user = data[0]
-    return (
-        f"## 查询结果\n\n"
-        f"- **用户ID**: {user.get('userId', '未知')}\n"
-        f"- **用户名**: {user.get('userName', '未知')}\n"
-        f"- **手机号**: {user.get('phone', '未知')}"
-    )
