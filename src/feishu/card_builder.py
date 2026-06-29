@@ -15,13 +15,8 @@ def clean_markdown(text: str) -> str:
     Returns:
         清理后的纯文本
     """
-    # 去掉粗体 **text** 或 __text__
+    # 去掉粗体 **text**
     text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
-    text = re.sub(r'__(.*?)__', r'\1', text)
-
-    # 去掉斜体 *text* 或 _text_
-    text = re.sub(r'\*(.*?)\*', r'\1', text)
-    text = re.sub(r'(?<!\w)_(.*?)_(?!\w)', r'\1', text)
 
     # 去掉删除线 ~~text~~
     text = re.sub(r'~~(.*?)~~', r'\1', text)
@@ -34,6 +29,9 @@ def clean_markdown(text: str) -> str:
 
     # 去掉图片 ![alt](url)
     text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
+
+    # 注意：不去掉斜体 *text* 和 __text__，因为下划线可能是变量名的一部分
+    # 如 mcp__sre__sre_query
 
     return text.strip()
 
