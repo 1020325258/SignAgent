@@ -76,8 +76,8 @@ def format_list(action: str, data: list) -> str:
     keys = list(data[0].keys())
 
     # 数据量大或字段多时，返回 JSON 格式让 Claude 处理
-    MAX_ROWS = 10
-    MAX_COLUMNS = 6
+    MAX_ROWS = 20
+    MAX_COLUMNS = 10
     if len(data) > MAX_ROWS or len(keys) > MAX_COLUMNS:
         import json
         # 截断过长的值
