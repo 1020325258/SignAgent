@@ -63,7 +63,10 @@ def format_result(action: str, data: Any) -> str:
 
 
 def format_list(action: str, data: list) -> str:
-    """格式化列表数据。"""
+    """格式化列表数据。
+
+    如果数据量大或字段多，返回 JSON 格式让 Claude Code SDK 处理。
+    """
     if not data:
         return "查询结果为空"
 
@@ -72,39 +75,22 @@ def format_list(action: str, data: list) -> str:
 
     keys = list(data[0].keys())
 
-    # 如果字段太多，只展示关键字段
-    MAX_COLUMNS = 8
-
-    # 针对不同 action 的关键字段
-    KEY_FIELDS = {
-        "field_config": ["id", "moduleKey", "fieldKey", "fieldName", "description", "required", "disabled"],
-        "contract": ["contractCode", "status", "type", "businessType", "amount", "ctime"],
-        "contract_node": ["nodeType", "fireTime"],
-        "contract_user": ["roleType", "name", "phone", "isSign"],
-        "contract_log": ["type", "content", "remark", "ctime"],
-    }
-
-    if len(keys) > MAX_COLUMNS:
-        # 优先使用 action 专属的关键字段
-        if action in KEY_FIELDS:
-            preferred = KEY_FIELDS[action]
-            keys = [k for k in preferred if k in keys]
-            # 如果关键字段不够，补充有含义的字段
-            if len(keys) < MAX_COLUMNS:
-                for key in data[0].keys():
-                    if key not in keys and len(keys) < MAX_COLUMNS:
-                        meaning = get_field_meaning(action, key)
-                        if meaning and meaning[0]:
-                            keys.append(key)
-        else:
-            # 通用逻辑：优先展示有含义的字段
-            key_scores = []
-            for key in keys:
-                meaning = get_field_meaning(action, key)
-                score = 2 if meaning and meaning[0] else (1 if key in ["id", "name", "key"] else 0)
-                key_scores.append((key, score))
-            key_scores.sort(key=lambda x: -x[1])
-            keys = [k for k, _ in key_scores[:MAX_COLUMNS]]
+    # 数据量大或字段多时，返回 JSON 格式让 Claude 处理
+    MAX_ROWS = 10
+    MAX_COLUMNS = 6
+    if len(data) > MAX_ROWS or len(keys) > MAX_COLUMNS:
+        import json
+        # 截断过长的值
+        truncated_data = []
+        for item in data[:20]:  # 最多返回 20 条
+            truncated_item = {}
+            for k, v in item.items():
+                str_v = str(v)
+                if len(str_v) > 100:
+                    str_v = str_v[:100] + "..."
+                truncated_item[k] = str_v
+            truncated_data.append(truncated_item)
+        return f"## 查询结果 ({len(data)} 条)\n\n```json\n{json.dumps(truncated_data, ensure_ascii=False, indent=2)}\n```"
 
     lines = [f"## 查询结果 ({len(data)} 条)\n"]
 
