@@ -1,0 +1,77 @@
+# 字段含义配置
+# key: "action.field" 或 "field"（通用兜底）
+# value: [中文含义, 枚举类型名或null]
+
+# ── 通用字段 ──────────────────────────────────────────────────
+contractCode: [合同编号, null]
+delStatus: [删除标记, null]
+ctime: [创建时间, null]
+mtime: [更新时间, null]
+id: [ID, null]
+
+# ── contract ──────────────────────────────────────────────────
+contract.contractNo: [合同编号, null]
+contract.businessType: [业务类型, BusinessTypeEnum]
+contract.projectOrderId: [订单号, null]
+contract.type: [合同类型, ContractTypeEnum]
+contract.status: [合同状态, ContractStatusEnum]
+contract.pdfGenerationMode: [PDF生成模式, PdfGenerationModeEnum]
+contract.userQueryStatus: [用户可见性, null]
+contract.userConfirmStatus: [用户确认状态, null]
+contract.userSignStatus: [用户签署状态, null]
+contract.signChannelType: [签署方式, SignChannelTypeEnum]
+contract.userSignType: [用户签署方式, UserSignTypeEnum]
+contract.auditType: [审核类型, AuditTypeEnum]
+contract.amount: [合同金额, null]
+contract.relateContractCode: [关联合同编号, null]
+contract.platformInstanceId: [协议平台实例ID, null]
+contract.errorMessage: [发起失败信息, null]
+
+# ── contract_user ─────────────────────────────────────────────
+contract_user.roleType: [用户角色, RoleTypeEnum]
+contract_user.name: [姓名, null]
+contract_user.phone: [手机号(加密), null]
+contract_user.isSign: [是否为签约人, IsSignEnum]
+contract_user.isAuth: [是否已认证, null]
+contract_user.certificateType: [证件类型, CertificateTypeEnum]
+contract_user.certificateNo: [证件号码(加密), null]
+
+# ── contract_node ─────────────────────────────────────────────
+contract_node.nodeType: [节点类型, NodeTypeEnum]
+contract_node.fireTime: [发生时间戳, null]
+
+# ── contract_log ──────────────────────────────────────────────
+contract_log.type: [操作类型, LogTypeEnum]
+contract_log.content: [日志内容, null]
+contract_log.remark: [备注, null]
+
+# ── contract_field ────────────────────────────────────────────
+contract_field.fieldKey: [字段名称, null]
+contract_field.fieldValue: [字段值, null]
+
+# ── contract_quotation ────────────────────────────────────────
+contract_quotation.billCode: [关联单据编号, null]
+contract_quotation.bindType: [绑定类型, BindTypeEnum]
+contract_quotation.status: [关联状态, null]
+
+# ── city_company_info ─────────────────────────────────────────
+city_company_info.businessType: [业务类型, BusinessTypeEnum]
+city_company_info.contractType: [合同类型, ContractTypeEnum]
+city_company_info.signChannelType: [签署方式, SignChannelTypeEnum]
+city_company_info.auditType: [审核类型, AuditTypeEnum]
+city_company_info.processMode: [流程模式, null]
+city_company_info.formId: [版式ID, null]
+city_company_info.version: [版本号, null]
+
+# ── field_config ──────────────────────────────────────────────
+field_config.businessType: [业务类型, BusinessTypeEnum]
+field_config.gbcode: [城市code, null]
+field_config.companyCode: [分公司code, null]
+field_config.contractType: [合同类型, ContractTypeEnum]
+field_config.version: [版本号, null]
+field_config.moduleKey: [字段所属模块, null]
+field_config.fieldKey: [字段key, null]
+field_config.fieldName: [字段名称, null]
+field_config.description: [字段描述, null]
+field_config.required: [是否必填, null]
+field_config.disabled: [是否只读, null]

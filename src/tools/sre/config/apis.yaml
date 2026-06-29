@@ -1,0 +1,325 @@
+# SRE 查询工具 - 接口配置
+# 新增接口只需在此文件添加配置，无需修改代码
+
+apis:
+  # ── SRE 后端接口 ──────────────────────────────────────────────
+
+  contract:
+    name: 查询合同信息
+    description: 根据合同编号或订单号查询合同信息
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/contract"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      contract_code:
+        type: string
+        required: false
+        description: "合同编号，以C开头，如 C1776759658764987"
+        api_key: contractCode
+      project_order_id:
+        type: string
+        required: false
+        description: "订单号，18位纯数字，如 826041310000003912"
+        api_key: projectOrderId
+    required_any: [contract_code, project_order_id]
+    response:
+      type: object
+      data_path: data
+
+  contract_node:
+    name: 查询合同节点
+    description: 查询合同的流程节点信息
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/contract-node"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      contract_code:
+        type: string
+        required: true
+        description: "合同编号，以C开头"
+        api_key: contractCode
+    response:
+      type: list
+      data_path: data
+
+  contract_user:
+    name: 查询签约人
+    description: 查询合同的签约人信息
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/contract-user"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      contract_code:
+        type: string
+        required: true
+        description: "合同编号，以C开头"
+        api_key: contractCode
+    response:
+      type: list
+      data_path: data
+
+  contract_field:
+    name: 查询合同扩展字段
+    description: 查询合同的扩展字段信息
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/contract-field"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      contract_code:
+        type: string
+        required: true
+        description: "合同编号，以C开头"
+        api_key: contractCode
+    response:
+      type: list
+      data_path: data
+
+  contract_quotation:
+    name: 查询签约单据
+    description: 查询合同关联的签约单据
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/contract-quotation-relation"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      contract_code:
+        type: string
+        required: true
+        description: "合同编号，以C开头"
+        api_key: contractCode
+    response:
+      type: list
+      data_path: data
+
+  contract_log:
+    name: 查询操作日志
+    description: 查询合同的操作日志
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/contract-log"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      contract_code:
+        type: string
+        required: true
+        description: "合同编号，以C开头"
+        api_key: contractCode
+      log_type:
+        type: integer
+        required: false
+        description: "日志类型"
+        api_key: type
+    response:
+      type: list
+      data_path: data
+
+  config_snap:
+    name: 查询配置快照
+    description: 查询订单的配置快照
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/project-config-snap"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      project_order_id:
+        type: string
+        required: true
+        description: "订单号，18位纯数字"
+        api_key: projectOrderId
+    response:
+      type: object
+      data_path: data
+
+  decrypt:
+    name: 解密敏感信息
+    description: 解密身份证号、手机号等敏感信息
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/decrypt"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      encrypted_text:
+        type: string
+        required: true
+        description: "需要解密的密文"
+        api_key: text
+    response:
+      type: object
+      data_path: data
+
+  city_company_info:
+    name: 查询城市公司配置
+    description: 查询城市公司的配置信息
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/contract-city-company-info"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      business_type:
+        type: integer
+        required: true
+        description: "业务类型：1=整装, 2=团装, 3=局装, 4=翻新全案"
+        api_key: businessType
+      gb_code:
+        type: integer
+        required: true
+        description: "城市code：被窝=110000, 圣都=0"
+        api_key: gbCode
+      company_code:
+        type: string
+        required: true
+        description: "分公司code：被窝=V201601528, 圣都=''"
+        api_key: companyCode
+      version:
+        type: integer
+        required: true
+        description: "版本号：圣都1=2.0, 2=2.5, 3=2.5预报价；被窝1=2.5"
+        api_key: version
+      contract_type:
+        type: integer
+        required: true
+        description: "合同类型"
+        api_key: type
+    response:
+      type: list
+      data_path: data
+
+  field_config:
+    name: 查询字段配置
+    description: 查询合同字段的配置信息
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/field-config"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      business_type:
+        type: integer
+        required: true
+        description: "业务类型：1=整装, 2=团装, 3=局装, 4=翻新全案"
+        api_key: businessType
+      gb_code:
+        type: integer
+        required: true
+        description: "城市code：被窝=110000, 圣都=0"
+        api_key: gbcode
+      company_code:
+        type: string
+        required: true
+        description: "分公司code：被窝=V201601528, 圣都=''"
+        api_key: companyCode
+      contract_type:
+        type: integer
+        required: true
+        description: "合同类型"
+        api_key: contractType
+      version:
+        type: integer
+        required: true
+        description: "版本号"
+        api_key: version
+      page_num:
+        type: integer
+        required: false
+        description: "页码"
+        api_key: pageNum
+      page_size:
+        type: integer
+        required: false
+        description: "每页大小"
+        api_key: pageSize
+    response:
+      type: object
+      data_path: data
+
+  protocol_config:
+    name: 查询协议配置
+    description: 查询协议平台的配置信息
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/protocol-config"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      form_id:
+        type: integer
+        required: true
+        description: "版式ID"
+        api_key: formId
+    response:
+      type: object
+      data_path: data
+
+  dim_combos:
+    name: 查询维度组合
+    description: 查询字段配置的维度组合
+    base_url: "http://preview.i.nrs-sales-project.home.ke.com"
+    endpoint: "/sre/field-config-dim-combos"
+    method: GET
+    auth:
+      app: sreAgent
+    parameters:
+      business_type:
+        type: integer
+        required: false
+        description: "业务类型"
+        api_key: businessType
+      gb_code:
+        type: integer
+        required: false
+        description: "城市code"
+        api_key: gbcode
+      company_code:
+        type: string
+        required: false
+        description: "分公司code"
+        api_key: companyCode
+      contract_type:
+        type: integer
+        required: false
+        description: "合同类型"
+        api_key: contractType
+      version:
+        type: integer
+        required: false
+        description: "版本号"
+        api_key: version
+    response:
+      type: list
+      data_path: data
+
+  # ── 用户系统接口 ──────────────────────────────────────────────
+
+  user-phone-query:
+    name: 根据手机号查询用户ID
+    description: 根据手机号查询对应的用户ID（ucid）
+    base_url: "http://i.cms.home.ke.com"
+    endpoint: "/api/operate/user-phone"
+    method: GET
+    auth: null
+    parameters:
+      phone:
+        type: string
+        required: true
+        description: "手机号，11位数字，如 15524175708"
+        api_key: bizId
+    default_params:
+      pageSize: 50
+      currentPage: 1
+    response:
+      type: custom
+      data_path: data.list
+      format: user_info
