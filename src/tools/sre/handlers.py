@@ -61,18 +61,10 @@ def validate_params(action: str, args: Dict[str, Any], api_config: Dict[str, Any
     for param_name, param_def in param_config.items():
         if param_def.get("required"):
             value = args.get(param_name)
-            # 根据类型验证
-            param_type = param_def.get("type", "string")
-            if param_type == "integer":
-                # 整数类型：检查是否为 None（允许 0）
-                if value is None:
-                    desc = param_def.get("description", param_name)
-                    return f"{action} 操作需要 {param_name} 参数（{desc}）"
-            else:
-                # 字符串类型：检查是否为 None 或空字符串
-                if not value:
-                    desc = param_def.get("description", param_name)
-                    return f"{action} 操作需要 {param_name} 参数（{desc}）"
+            # 只检查 None（允许 0 和空字符串）
+            if value is None:
+                desc = param_def.get("description", param_name)
+                return f"{action} 操作需要 {param_name} 参数（{desc}）"
 
     # 检查至少需要一个的参数
     if required_any:
