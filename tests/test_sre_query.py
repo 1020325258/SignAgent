@@ -150,7 +150,8 @@ class TestFormatters:
         }
         result = format_result("contract", data)
         assert "C123" in result
-        assert "合同编号" in result
+        assert "5=待提交审核" in result  # 枚举值翻译
+        assert "1=认购合同" in result
 
     def test_format_list(self):
         """测试列表格式化。"""

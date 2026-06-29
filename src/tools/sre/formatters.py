@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """结果格式化模块。"""
 
+import json
 import logging
 from typing import Any
 
@@ -39,6 +40,33 @@ def translate_enum(enum_name: str, value: Any) -> str:
     return str(value)
 
 
+def format_value(action: str, key: str, value: Any) -> str:
+    """格式化单个值，包含枚举翻译。
+
+    Args:
+        action: 操作类型
+        key: 字段名
+        value: 字段值
+
+    Returns:
+        格式化后的字符串
+    """
+    if value is None:
+        return ""
+
+    meaning = get_field_meaning(action, key)
+    if meaning:
+        _, enum_name = meaning
+        if enum_name:
+            return translate_enum(enum_name, value)
+
+    # 截断过长的值
+    str_v = str(value)
+    if len(str_v) > 200:
+        str_v = str_v[:200] + "..."
+    return str_v
+
+
 def format_result(action: str, data: Any) -> str:
     """格式化查询结果。
 
@@ -63,92 +91,28 @@ def format_result(action: str, data: Any) -> str:
 
 
 def format_list(action: str, data: list) -> str:
-    """格式化列表数据。
-
-    如果数据量大或字段多，返回 JSON 格式让 Claude Code SDK 处理。
-    """
+    """格式化列表数据为 JSON 格式。"""
     if not data:
         return "查询结果为空"
 
     if not isinstance(data[0], dict):
         return f"## 查询结果\n\n" + "\n".join(f"- {item}" for item in data)
 
-    keys = list(data[0].keys())
+    # 转换为 JSON 格式，包含枚举翻译
+    truncated_data = []
+    for item in data[:50]:  # 最多返回 50 条
+        truncated_item = {}
+        for k, v in item.items():
+            truncated_item[k] = format_value(action, k, v)
+        truncated_data.append(truncated_item)
 
-    # 数据量大或字段多时，返回 JSON 格式让 Claude 处理
-    MAX_ROWS = 20
-    MAX_COLUMNS = 10
-    if len(data) > MAX_ROWS or len(keys) > MAX_COLUMNS:
-        import json
-        # 截断过长的值
-        truncated_data = []
-        for item in data[:20]:  # 最多返回 20 条
-            truncated_item = {}
-            for k, v in item.items():
-                str_v = str(v)
-                if len(str_v) > 100:
-                    str_v = str_v[:100] + "..."
-                truncated_item[k] = str_v
-            truncated_data.append(truncated_item)
-        return f"## 查询结果 ({len(data)} 条)\n\n```json\n{json.dumps(truncated_data, ensure_ascii=False, indent=2)}\n```"
-
-    lines = [f"## 查询结果 ({len(data)} 条)\n"]
-
-    # 表头
-    lines.append("| " + " | ".join(keys) + " |")
-    lines.append("| " + " | ".join(["---"] * len(keys)) + " |")
-
-    # 含义行
-    meanings = []
-    for key in keys:
-        meaning = get_field_meaning(action, key)
-        meanings.append(meaning[0] if meaning else "")
-    lines.append("| " + " | ".join(meanings) + " |")
-
-    # 数据行（最多显示 20 行）
-    MAX_ROWS = 20
-    for item in data[:MAX_ROWS]:
-        values = []
-        for key in keys:
-            meaning = get_field_meaning(action, key)
-            if meaning:
-                _, enum_name = meaning
-                str_value = translate_enum(enum_name, item.get(key)) if enum_name else str(item.get(key, ""))
-            else:
-                str_value = str(item.get(key, ""))
-
-            if len(str_value) > 50:
-                str_value = str_value[:50] + "..."
-            values.append(str_value)
-        lines.append("| " + " | ".join(values) + " |")
-
-    # 如果数据被截断，添加提示
-    if len(data) > MAX_ROWS:
-        lines.append(f"\n... 还有 {len(data) - MAX_ROWS} 条数据未显示")
-
-    return "\n".join(lines)
+    return f"## 查询结果 ({len(data)} 条)\n\n```json\n{json.dumps(truncated_data, ensure_ascii=False, indent=2)}\n```"
 
 
 def format_object(action: str, data: dict) -> str:
-    """格式化对象数据。"""
-    lines = ["## 查询结果\n"]
-    lines.append("| 字段 | 值 | 含义 |")
-    lines.append("|------|-----|------|")
+    """格式化对象数据为 JSON 格式。"""
+    truncated = {}
+    for k, v in data.items():
+        truncated[k] = format_value(action, k, v)
 
-    for key, value in data.items():
-        meaning = get_field_meaning(action, key)
-        if meaning:
-            desc, enum_name = meaning
-            str_value = translate_enum(enum_name, value) if enum_name else str(value)
-            col3 = desc
-        else:
-            str_value = str(value)
-            col3 = "-"
-
-        if len(str_value) > 200:
-            str_value = str_value[:200] + "..."
-        lines.append(f"| {key} | {str_value} | {col3} |")
-
-    return "\n".join(lines)
-
-
+    return f"## 查询结果\n\n```json\n{json.dumps(truncated, ensure_ascii=False, indent=2)}\n```"
