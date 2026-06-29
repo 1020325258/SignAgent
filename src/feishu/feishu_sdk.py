@@ -26,6 +26,7 @@ import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
 
 from ..agent import SignAgent
+from .reaction import TypingIndicator
 
 # 加载环境变量
 load_dotenv()
@@ -103,6 +104,10 @@ def handle_message(data: P2ImMessageReceiveV1) -> None:
 
         logger.info(f"收到消息: {question}")
 
+        # 添加打字状态指示器
+        typing = TypingIndicator(message_id)
+        typing.start()
+
         # 在新线程中运行异步任务
         import threading
         def run_async():
@@ -111,6 +116,7 @@ def handle_message(data: P2ImMessageReceiveV1) -> None:
             try:
                 loop.run_until_complete(process_message(message_id, question))
             finally:
+                typing.stop()  # 移除打字状态
                 loop.close()
 
         thread = threading.Thread(target=run_async)
