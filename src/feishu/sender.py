@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""飞书消息发送模块。"""
+"""飞书消息发送模块 - 借鉴 cc-connect 的实现。"""
 
 import json
 import logging
@@ -9,8 +9,62 @@ from lark_oapi.api.im.v1 import *
 
 from .client import get_feishu_config
 from .card_builder import build_card_content
+from .retry import with_retry
 
 logger = logging.getLogger(__name__)
+
+# 飞书限制（借鉴 cc-connect）
+MAX_CARD_JSON_BYTES = 28000  # 卡片最大大小
+
+
+def _create_client() -> lark.Client:
+    """创建飞书客户端。"""
+    config = get_feishu_config()
+    return lark.Client.builder() \
+        .app_id(config["app_id"]) \
+        .app_secret(config["app_secret"]) \
+        .build()
+
+
+def _compress_content(content: str, level: int = 0) -> str:
+    """渐进式压缩内容（借鉴 cc-connect）。
+
+    Args:
+        content: 原始内容
+        level: 压缩级别 (0-3)
+
+    Returns:
+        压缩后的内容
+    """
+    import re
+
+    if level == 0:
+        return content
+
+    # 压缩级别配置（借鉴 cc-connect）
+    configs = [
+        {"max_value_len": 200, "max_rows": 50},  # level 1
+        {"max_value_len": 120, "max_rows": 30},   # level 2
+        {"max_value_len": 80, "max_rows": 20},    # level 3
+    ]
+
+    config = configs[min(level - 1, len(configs) - 1)]
+
+    lines = content.split('\n')
+    compressed = []
+    row_count = 0
+
+    for line in lines:
+        # 截断过长的值
+        if len(line) > config["max_value_len"]:
+            line = line[:config["max_value_len"]] + "..."
+
+        # 限制行数
+        if row_count < config["max_rows"]:
+            compressed.append(line)
+            row_count += 1
+
+    return '\n'.join(compressed)
 
 
 async def send_reply(message_id: str, content: str, msg_type: str = "text") -> str:
@@ -26,19 +80,24 @@ async def send_reply(message_id: str, content: str, msg_type: str = "text") -> s
         回复消息的 message_id，失败返回 None
     """
     try:
-        config = get_feishu_config()
-
-        # 创建 Client
-        client = lark.Client.builder() \
-            .app_id(config["app_id"]) \
-            .app_secret(config["app_secret"]) \
-            .build()
+        client = _create_client()
 
         # 根据消息类型构造内容
         if msg_type == "interactive":
             card_content = build_card_content(content, is_thinking=True)
         else:
             card_content = json.dumps({"text": content})
+
+        # 渐进式压缩（借鉴 cc-connect）
+        for level in range(4):
+            if level > 0:
+                compressed_content = _compress_content(content, level)
+                card_content = build_card_content(compressed_content, is_thinking=True)
+                logger.info(f"内容过大，压缩级别 {level}")
+
+            # 检查大小
+            if len(card_content.encode('utf-8')) <= MAX_CARD_JSON_BYTES:
+                break
 
         # 构造回复请求
         request = ReplyMessageRequest.builder() \
@@ -49,22 +108,20 @@ async def send_reply(message_id: str, content: str, msg_type: str = "text") -> s
                 .build()) \
             .build()
 
-        # 发送回复
-        response = client.im.v1.message.reply(request)
+        # 发送回复（带重试）
+        response = with_retry(client.im.v1.message.reply, request)
 
         if response.success():
             reply_message_id = response.data.message_id
             logger.info(f"回复发送成功: {reply_message_id}")
             return reply_message_id
         else:
+            # 速率限制静默跳过（借鉴 cc-connect）
+            if response.code == 99991400:
+                logger.debug(f"速率限制，跳过: {response.code}")
+                return None
+
             logger.error(f"回复发送失败: {response.code} - {response.msg}")
-
-            # 如果是内容过长，尝试截断后重试
-            if response.code in (230001, 230099) and msg_type == "interactive":
-                logger.info("内容过长，尝试截断后重试")
-                truncated_content = _truncate_content(content)
-                return await send_reply(message_id, truncated_content, msg_type)
-
             return None
 
     except Exception as e:
@@ -82,16 +139,21 @@ async def update_message(message_id: str, content: str, is_thinking: bool = True
         is_thinking: 是否仍在思考中
     """
     try:
-        config = get_feishu_config()
-
-        # 创建 Client
-        client = lark.Client.builder() \
-            .app_id(config["app_id"]) \
-            .app_secret(config["app_secret"]) \
-            .build()
+        client = _create_client()
 
         # 构建卡片内容
         card_content = build_card_content(content, is_thinking=is_thinking)
+
+        # 渐进式压缩（借鉴 cc-connect）
+        for level in range(4):
+            if level > 0:
+                compressed_content = _compress_content(content, level)
+                card_content = build_card_content(compressed_content, is_thinking=is_thinking)
+                logger.info(f"内容过大，压缩级别 {level}")
+
+            # 检查大小
+            if len(card_content.encode('utf-8')) <= MAX_CARD_JSON_BYTES:
+                break
 
         # 构造更新请求
         request = PatchMessageRequest.builder() \
@@ -101,35 +163,18 @@ async def update_message(message_id: str, content: str, is_thinking: bool = True
                 .build()) \
             .build()
 
-        # 更新消息
-        response = client.im.v1.message.patch(request)
+        # 更新消息（带重试）
+        response = with_retry(client.im.v1.message.patch, request)
 
         if response.success():
             logger.debug(f"消息更新成功: {message_id}")
         else:
-            logger.error(f"消息更新失败: {response.code} - {response.msg}")
+            # 速率限制静默跳过（借鉴 cc-connect）
+            if response.code == 99991400:
+                logger.debug(f"速率限制，跳过: {response.code}")
+                return
 
-            # 如果是内容过长，尝试截断后重试
-            if response.code in (230001, 230099):
-                logger.info("内容过长，尝试截断后重试")
-                truncated_content = _truncate_content(content)
-                await update_message(message_id, truncated_content, is_thinking)
+            logger.error(f"消息更新失败: {response.code} - {response.msg}")
 
     except Exception as e:
         logger.error(f"更新消息失败: {e}")
-
-
-def _truncate_content(content: str, max_length: int = 10000) -> str:
-    """截断内容到指定长度。
-
-    Args:
-        content: 原始内容
-        max_length: 最大长度
-
-    Returns:
-        截断后的内容
-    """
-    if len(content) <= max_length:
-        return content
-
-    return content[:max_length] + "\n\n... (内容过长，已截断)"

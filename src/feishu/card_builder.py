@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
-"""飞书卡片内容构建模块。"""
+"""飞书卡片内容构建模块 - 借鉴 cc-connect 的实现。"""
 
 import json
 import re
+
+# 飞书表格限制（借鉴 cc-connect）
+MAX_CARD_TABLES = 5
 
 
 def clean_markdown(text: str) -> str:
@@ -66,8 +69,21 @@ def build_card_content(content: str, is_thinking: bool = False) -> str:
             markdown_lines.clear()
 
     def flush_table():
-        """将累积的表格添加到 elements"""
+        """将累积的表格添加到 elements（借鉴 cc-connect 的表格限制）"""
         if table_headers and table_rows:
+            # 检查表格数量限制（借鉴 cc-connect: maxCardTables = 5）
+            table_count = sum(1 for e in elements if e.get("tag") == "table")
+            if table_count >= MAX_CARD_TABLES:
+                # 超过限制，降级为 markdown 格式
+                markdown_lines.append(f"**表格 {table_count + 1}（已超过显示限制）**")
+                for row in table_rows[:5]:  # 只显示前 5 行
+                    markdown_lines.append(" | ".join(row))
+                if len(table_rows) > 5:
+                    markdown_lines.append(f"... 还有 {len(table_rows) - 5} 行")
+                table_headers.clear()
+                table_rows.clear()
+                return
+
             # 构建飞书 Table 组件
             columns = []
             for i, header in enumerate(table_headers):
