@@ -2,6 +2,7 @@
 """飞书消息发送模块 - 借鉴 cc-connect 的实现。"""
 
 import json
+import re
 import logging
 
 import lark_oapi as lark
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # 飞书限制（借鉴 cc-connect）
 MAX_CARD_JSON_BYTES = 28000  # 卡片最大大小
+MAX_CARD_TABLES = 5  # 卡片最多表格数
 
 
 def _create_client() -> lark.Client:
@@ -24,6 +26,51 @@ def _create_client() -> lark.Client:
         .app_id(config["app_id"]) \
         .app_secret(config["app_secret"]) \
         .build()
+
+
+def _count_markdown_tables(content: str) -> int:
+    """计算 markdown 表格数量（借鉴 cc-connect）。
+
+    Args:
+        content: markdown 内容
+
+    Returns:
+        表格数量
+    """
+    count = 0
+    in_table = False
+    for line in content.split('\n'):
+        stripped = line.strip()
+        is_table_line = len(stripped) > 1 and stripped[0] == '|' and stripped[-1] == '|'
+        if is_table_line and not in_table:
+            count += 1
+            in_table = True
+        elif not is_table_line:
+            in_table = False
+    return count
+
+
+def _build_post_md_json(content: str) -> str:
+    """构建 post 消息格式（借鉴 cc-connect）。
+
+    post 格式支持 markdown 表格渲染，不受表格数量限制。
+
+    Args:
+        content: markdown 内容
+
+    Returns:
+        post 消息 JSON 字符串
+    """
+    post = {
+        "zh_cn": {
+            "content": [
+                [
+                    {"tag": "md", "text": content}
+                ]
+            ]
+        }
+    }
+    return json.dumps(post, ensure_ascii=False)
 
 
 def _compress_content(content: str, level: int = 0) -> str:
@@ -84,7 +131,14 @@ async def send_reply(message_id: str, content: str, msg_type: str = "text") -> s
 
         # 根据消息类型构造内容
         if msg_type == "interactive":
-            card_content = build_card_content(content, is_thinking=True)
+            # 检测表格数量，超过限制则降级到 post 格式（借鉴 cc-connect）
+            table_count = _count_markdown_tables(content)
+            if table_count > MAX_CARD_TABLES:
+                logger.info(f"表格数量 ({table_count}) 超过限制 ({MAX_CARD_TABLES})，降级到 post 格式")
+                card_content = _build_post_md_json(content)
+                msg_type = "post"
+            else:
+                card_content = build_card_content(content, is_thinking=True)
         else:
             card_content = json.dumps({"text": content})
 
