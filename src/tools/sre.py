@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """SRE 生产环境数据查询工具。"""
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Dict, Tuple
 
 import httpx
 from claude_agent_sdk import tool
 
 from config import get_sre_config
+from .enums import ENUM_REGISTRY
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,118 @@ ENDPOINT_MAP = {
     "protocol_config": "/sre/protocol-config",
     "dim_combos": "/sre/field-config-dim-combos",
 }
+
+# ── 字段含义映射 ──────────────────────────────────────────────
+# key = "action.field" 或 "field"（通用兜底）
+# value = (中文含义, 枚举类型名或None)
+FIELD_MEANINGS: Dict[str, Tuple[str, Optional[str]]] = {
+    # ── 通用字段 ──
+    "contractCode": ("合同编号", None),
+    "delStatus": ("删除标记", None),
+    "ctime": ("创建时间", None),
+    "mtime": ("更新时间", None),
+    # ── contract ──
+    "contract.contractNo": ("合同编号", None),
+    "contract.businessType": ("业务类型", "BusinessTypeEnum"),
+    "contract.projectOrderId": ("订单号", None),
+    "contract.type": ("合同类型", "ContractTypeEnum"),
+    "contract.status": ("合同状态", "ContractStatusEnum"),
+    "contract.pdfGenerationMode": ("PDF生成模式", "PdfGenerationModeEnum"),
+    "contract.userQueryStatus": ("用户可见性", None),
+    "contract.userConfirmStatus": ("用户确认状态", None),
+    "contract.userSignStatus": ("用户签署状态", None),
+    "contract.signChannelType": ("签署方式", "SignChannelTypeEnum"),
+    "contract.userSignType": ("用户签署方式", "UserSignTypeEnum"),
+    "contract.auditType": ("审核类型", "AuditTypeEnum"),
+    "contract.amount": ("合同金额", None),
+    "contract.relateContractCode": ("关联合同编号", None),
+    "contract.platformInstanceId": ("协议平台实例ID", None),
+    "contract.errorMessage": ("发起失败信息", None),
+    # ── contract_user ──
+    "contract_user.roleType": ("用户角色", "RoleTypeEnum"),
+    "contract_user.name": ("姓名", None),
+    "contract_user.phone": ("手机号(加密)", None),
+    "contract_user.isSign": ("是否为签约人", "IsSignEnum"),
+    "contract_user.isAuth": ("是否已认证", None),
+    "contract_user.certificateType": ("证件类型", "CertificateTypeEnum"),
+    "contract_user.certificateNo": ("证件号码(加密)", None),
+    # ── contract_node ──
+    "contract_node.nodeType": ("节点类型", "NodeTypeEnum"),
+    "contract_node.fireTime": ("发生时间戳", None),
+    # ── contract_log ──
+    "contract_log.type": ("操作类型", "LogTypeEnum"),
+    "contract_log.content": ("日志内容", None),
+    "contract_log.remark": ("备注", None),
+    # ── contract_field ──
+    "contract_field.fieldKey": ("字段名称", None),
+    "contract_field.fieldValue": ("字段值", None),
+    # ── contract_quotation ──
+    "contract_quotation.billCode": ("关联单据编号", None),
+    "contract_quotation.bindType": ("绑定类型", "BindTypeEnum"),
+    "contract_quotation.status": ("关联状态", None),
+    # ── city_company_info ──
+    "city_company_info.businessType": ("业务类型", "BusinessTypeEnum"),
+    "city_company_info.contractType": ("合同类型", "ContractTypeEnum"),
+    "city_company_info.signChannelType": ("签署方式", "SignChannelTypeEnum"),
+    "city_company_info.auditType": ("审核类型", "AuditTypeEnum"),
+    "city_company_info.processMode": ("流程模式", None),
+    "city_company_info.formId": ("版式ID", None),
+    "city_company_info.version": ("版本号", None),
+    # ── field_config ──
+    "field_config.businessType": ("业务类型", "BusinessTypeEnum"),
+    "field_config.gbcode": ("城市code", None),
+    "field_config.companyCode": ("分公司code", None),
+    "field_config.contractType": ("合同类型", "ContractTypeEnum"),
+    "field_config.version": ("版本号", None),
+    "field_config.moduleKey": ("字段所属模块", None),
+    "field_config.fieldKey": ("字段key", None),
+    "field_config.fieldName": ("字段名称", None),
+    "field_config.description": ("字段描述", None),
+    "field_config.required": ("是否必填", None),
+    "field_config.disabled": ("是否只读", None),
+}
+
+
+def get_meaning(action: str, field_name: str) -> Optional[Tuple[str, Optional[str]]]:
+    """查询字段含义，返回 (含义, 枚举类型名) 或 None。
+
+    优先匹配 "action.field"，未命中则匹配 "field"（通用兜底）。
+    """
+    return (
+        FIELD_MEANINGS.get(f"{action}.{field_name}")
+        or FIELD_MEANINGS.get(field_name)
+    )
+
+
+def translate_enum(enum_name: str, value: Any) -> str:
+    """翻译枚举值，返回 '值=含义' 格式。
+
+    Args:
+        enum_name: 枚举类型名，如 "ContractTypeEnum"。
+        value: 枚举值。
+
+    Returns:
+        翻译后的字符串，如 "6=整装首期款合同"。
+        如果无法翻译，返回原值字符串。
+    """
+    if not enum_name or value is None:
+        return str(value)
+
+    mapping = ENUM_REGISTRY.get(enum_name)
+    if mapping:
+        # 尝试 int 转换（大部分枚举是 int 类型）
+        try:
+            int_value = int(value)
+            translated = mapping.get(int_value)
+            if translated:
+                return f"{int_value}={translated}"
+        except (ValueError, TypeError):
+            # 非数字类型的枚举
+            translated = mapping.get(str(value))
+            if translated:
+                return f"{value}={translated}"
+
+    return str(value)
 
 
 def clean_params(params: dict) -> dict:
@@ -218,7 +331,7 @@ async def sre_query(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def format_sre_result(action: str, data: Any) -> str:
-    """格式化 SRE 查询结果。"""
+    """格式化 SRE 查询结果（带枚举值翻译）。"""
     if isinstance(data, list):
         if not data:
             return "查询结果为空"
@@ -227,11 +340,37 @@ def format_sre_result(action: str, data: Any) -> str:
         if isinstance(data[0], dict):
             keys = list(data[0].keys())
             lines = [f"## 查询结果 ({len(data)} 条)\n"]
+
+            # 表头
             lines.append("| " + " | ".join(keys) + " |")
             lines.append("| " + " | ".join(["---"] * len(keys)) + " |")
 
+            # 含义行
+            meanings = []
+            for key in keys:
+                meaning = get_meaning(action, key)
+                if meaning:
+                    desc, _ = meaning
+                    meanings.append(desc)
+                else:
+                    meanings.append("")
+            lines.append("| " + " | ".join(meanings) + " |")
+
+            # 数据行
             for item in data:
-                values = [str(item.get(k, ""))[:100] for k in keys]
+                values = []
+                for key in keys:
+                    meaning = get_meaning(action, key)
+                    if meaning:
+                        _, enum_name = meaning
+                        # 自动翻译枚举值
+                        str_value = translate_enum(enum_name, item.get(key)) if enum_name else str(item.get(key, ""))
+                    else:
+                        str_value = str(item.get(key, ""))
+
+                    if len(str_value) > 100:
+                        str_value = str_value[:100] + "..."
+                    values.append(str_value)
                 lines.append("| " + " | ".join(values) + " |")
 
             return "\n".join(lines)
@@ -241,14 +380,23 @@ def format_sre_result(action: str, data: Any) -> str:
     elif isinstance(data, dict):
         # 对象格式化为表格
         lines = ["## 查询结果\n"]
-        lines.append("| 字段 | 值 |")
-        lines.append("|------|-----|")
+        lines.append("| 字段 | 值 | 含义 |")
+        lines.append("|------|-----|------|")
 
         for key, value in data.items():
-            str_value = str(value)
+            meaning = get_meaning(action, key)
+            if meaning:
+                desc, enum_name = meaning
+                # 自动翻译枚举值
+                str_value = translate_enum(enum_name, value) if enum_name else str(value)
+                col3 = desc
+            else:
+                str_value = str(value)
+                col3 = "-"
+
             if len(str_value) > 200:
                 str_value = str_value[:200] + "..."
-            lines.append(f"| {key} | {str_value} |")
+            lines.append(f"| {key} | {str_value} | {col3} |")
 
         return "\n".join(lines)
 
