@@ -71,6 +71,20 @@ def format_list(action: str, data: list) -> str:
         return f"## 查询结果\n\n" + "\n".join(f"- {item}" for item in data)
 
     keys = list(data[0].keys())
+
+    # 如果字段太多（>6），只展示关键字段
+    MAX_COLUMNS = 6
+    if len(keys) > MAX_COLUMNS:
+        # 优先展示有含义的字段
+        key_scores = []
+        for key in keys:
+            meaning = get_field_meaning(action, key)
+            score = 2 if meaning and meaning[0] else (1 if key in ["id", "fieldKey", "fieldName", "moduleKey", "name"] else 0)
+            key_scores.append((key, score))
+        # 按分数排序，取前 MAX_COLUMNS 个
+        key_scores.sort(key=lambda x: -x[1])
+        keys = [k for k, _ in key_scores[:MAX_COLUMNS]]
+
     lines = [f"## 查询结果 ({len(data)} 条)\n"]
 
     # 表头
@@ -84,8 +98,9 @@ def format_list(action: str, data: list) -> str:
         meanings.append(meaning[0] if meaning else "")
     lines.append("| " + " | ".join(meanings) + " |")
 
-    # 数据行
-    for item in data:
+    # 数据行（最多显示 20 行）
+    MAX_ROWS = 20
+    for item in data[:MAX_ROWS]:
         values = []
         for key in keys:
             meaning = get_field_meaning(action, key)
@@ -95,10 +110,14 @@ def format_list(action: str, data: list) -> str:
             else:
                 str_value = str(item.get(key, ""))
 
-            if len(str_value) > 100:
-                str_value = str_value[:100] + "..."
+            if len(str_value) > 50:
+                str_value = str_value[:50] + "..."
             values.append(str_value)
         lines.append("| " + " | ".join(values) + " |")
+
+    # 如果数据被截断，添加提示
+    if len(data) > MAX_ROWS:
+        lines.append(f"\n... 还有 {len(data) - MAX_ROWS} 条数据未显示")
 
     return "\n".join(lines)
 
