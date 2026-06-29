@@ -58,6 +58,13 @@ async def send_reply(message_id: str, content: str, msg_type: str = "text") -> s
             return reply_message_id
         else:
             logger.error(f"回复发送失败: {response.code} - {response.msg}")
+
+            # 如果是内容过长，尝试截断后重试
+            if response.code in (230001, 230099) and msg_type == "interactive":
+                logger.info("内容过长，尝试截断后重试")
+                truncated_content = _truncate_content(content)
+                return await send_reply(message_id, truncated_content, msg_type)
+
             return None
 
     except Exception as e:
@@ -102,5 +109,27 @@ async def update_message(message_id: str, content: str, is_thinking: bool = True
         else:
             logger.error(f"消息更新失败: {response.code} - {response.msg}")
 
+            # 如果是内容过长，尝试截断后重试
+            if response.code in (230001, 230099):
+                logger.info("内容过长，尝试截断后重试")
+                truncated_content = _truncate_content(content)
+                await update_message(message_id, truncated_content, is_thinking)
+
     except Exception as e:
         logger.error(f"更新消息失败: {e}")
+
+
+def _truncate_content(content: str, max_length: int = 10000) -> str:
+    """截断内容到指定长度。
+
+    Args:
+        content: 原始内容
+        max_length: 最大长度
+
+    Returns:
+        截断后的内容
+    """
+    if len(content) <= max_length:
+        return content
+
+    return content[:max_length] + "\n\n... (内容过长，已截断)"
