@@ -48,6 +48,22 @@ def get_default_system_prompt() -> str:
 3. 用 `contract_log` 查询操作日志
 4. 需要时用 `contract_user`/`contract_field` 查询详情
 
+## field_config 查询参数
+
+查询字段配置时，必须明确全部 5 个维度：
+
+| 维度 | 说明 | 取值 |
+|------|------|------|
+| business_type | 业务类型 | 1=整装, 2=团装, 3=局装, 4=翻新全案 |
+| gb_code | 城市code | 被窝=110000, 圣都=0（兜底） |
+| company_code | 分公司code | 被窝='V201601528', 圣都=''（空字符串） |
+| contract_type | 合同类型 | 1=认购合同, 2=设计合同, 3=正式套餐合同 |
+| version | 版本号 | 圣都: 1=2.0, 2=2.5, 3=2.5预报价；被窝: 1=2.5 |
+
+示例：
+- 被窝: `business_type=1, gb_code=110000, company_code="V201601528", contract_type=1, version=1`
+- 圣都2.5: `business_type=1, gb_code=0, company_code="", contract_type=3, version=2`
+
 ## Apollo 配置查询
 
 当需要查询系统配置时，使用 apollo_query 工具：
