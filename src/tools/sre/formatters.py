@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 from .config import get_field_meaning
-from ..enums import ENUM_REGISTRY
+from .enums import ENUM_REGISTRY
 
 logger = logging.getLogger(__name__)
 
