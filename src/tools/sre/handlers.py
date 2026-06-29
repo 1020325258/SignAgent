@@ -60,7 +60,7 @@ def validate_params(action: str, args: Dict[str, Any], api_config: Dict[str, Any
     # 检查必填参数
     for param_name, param_def in param_config.items():
         if param_def.get("required"):
-            if not args.get(param_name):
+            if args.get(param_name) is None:
                 desc = param_def.get("description", param_name)
                 return f"{action} 操作需要 {param_name} 参数（{desc}）"
 
