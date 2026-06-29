@@ -129,16 +129,20 @@ async def send_reply(message_id: str, content: str, msg_type: str = "text") -> s
     try:
         client = _create_client()
 
-        # 根据消息类型构造内容
+        # 检测表格数量，超过限制则降级到 post 格式（借鉴 cc-connect）
+        use_post = False
         if msg_type == "interactive":
-            # 检测表格数量，超过限制则降级到 post 格式（借鉴 cc-connect）
             table_count = _count_markdown_tables(content)
             if table_count > MAX_CARD_TABLES:
                 logger.info(f"表格数量 ({table_count}) 超过限制 ({MAX_CARD_TABLES})，降级到 post 格式")
-                card_content = _build_post_md_json(content)
-                msg_type = "post"
-            else:
-                card_content = build_card_content(content, is_thinking=True)
+                use_post = True
+
+        # 根据消息类型构造内容
+        if use_post:
+            card_content = _build_post_md_json(content)
+            msg_type = "post"
+        elif msg_type == "interactive":
+            card_content = build_card_content(content, is_thinking=True)
         else:
             card_content = json.dumps({"text": content})
 
@@ -146,7 +150,10 @@ async def send_reply(message_id: str, content: str, msg_type: str = "text") -> s
         for level in range(4):
             if level > 0:
                 compressed_content = _compress_content(content, level)
-                card_content = build_card_content(compressed_content, is_thinking=True)
+                if use_post:
+                    card_content = _build_post_md_json(compressed_content)
+                else:
+                    card_content = build_card_content(compressed_content, is_thinking=True)
                 logger.info(f"内容过大，压缩级别 {level}")
 
             # 检查大小
@@ -195,14 +202,27 @@ async def update_message(message_id: str, content: str, is_thinking: bool = True
     try:
         client = _create_client()
 
-        # 构建卡片内容
-        card_content = build_card_content(content, is_thinking=is_thinking)
+        # 检测表格数量，超过限制则降级到 post 格式（借鉴 cc-connect）
+        use_post = False
+        table_count = _count_markdown_tables(content)
+        if table_count > MAX_CARD_TABLES:
+            logger.info(f"表格数量 ({table_count}) 超过限制 ({MAX_CARD_TABLES})，降级到 post 格式")
+            use_post = True
+
+        # 构建内容
+        if use_post:
+            card_content = _build_post_md_json(content)
+        else:
+            card_content = build_card_content(content, is_thinking=is_thinking)
 
         # 渐进式压缩（借鉴 cc-connect）
         for level in range(4):
             if level > 0:
                 compressed_content = _compress_content(content, level)
-                card_content = build_card_content(compressed_content, is_thinking=is_thinking)
+                if use_post:
+                    card_content = _build_post_md_json(compressed_content)
+                else:
+                    card_content = build_card_content(compressed_content, is_thinking=is_thinking)
                 logger.info(f"内容过大，压缩级别 {level}")
 
             # 检查大小

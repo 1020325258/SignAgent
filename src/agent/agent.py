@@ -71,7 +71,7 @@ class SignAgent:
             cwd=self.project_dir,
             system_prompt=self.system_prompt,
             env=self.api_config,
-            max_turns=30,
+            max_turns=50,
         )
 
     async def chat(
