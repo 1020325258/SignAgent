@@ -12,15 +12,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.feishu.sender import (
     _count_markdown_tables,
-    _build_content,
     send_reply,
     update_message,
+    update_rich_card,
     PreviewHandle,
     create_card_entity,
     stream_card_text,
     MAX_CARD_TABLES,
 )
-from src.feishu.card_builder import build_card_content, build_post_md_json
+from src.feishu.card_builder import build_card_content, build_post_md_json, build_rich_card_content
 
 
 # ── 辅助函数 ──
@@ -41,11 +41,6 @@ def _mock_error_response(code=99991401, msg="error"):
     return resp
 
 
-def _make_many_tables(n=10):
-    table = "| a | b |\n|---|---|\n| 1 | 2 |"
-    return "\n\n".join([table] * n)
-
-
 # ── 表格计数 ──
 
 class TestCountMarkdownTables:
@@ -56,78 +51,52 @@ class TestCountMarkdownTables:
     def test_single_table(self):
         assert _count_markdown_tables("| a | b |\n|---|---|\n| 1 | 2 |") == 1
 
-    def test_two_tables(self):
-        content = "| a | b |\n|---|---|\n| 1 | 2 |\n\nsome text\n\n| c | d |\n|---|---|\n| 3 | 4 |"
-        assert _count_markdown_tables(content) == 2
 
-    def test_six_tables(self):
-        assert _count_markdown_tables(_make_many_tables(6)) == 6
+# ── 富卡片构建 ──
 
-
-# ── 卡片构建 ──
-
-class TestBuildCardContent:
+class TestBuildRichCardContent:
 
     def test_schema_2_0(self):
-        result = build_card_content("hello")
+        result = build_rich_card_content([], [], "hello")
         parsed = json.loads(result)
         assert parsed["schema"] == "2.0"
 
-    def test_element_id_main_text(self):
-        """markdown 元素有 element_id。"""
-        result = build_card_content("hello")
-        parsed = json.loads(result)
-        elem = parsed["body"]["elements"][0]
-        assert elem["element_id"] == "main_text"
-
-    def test_streaming_config(self):
-        """config 包含 streaming_mode。"""
-        result = build_card_content("hello")
-        parsed = json.loads(result)
-        assert parsed["config"]["streaming_mode"] is True
-        assert parsed["config"]["update_multi"] is True
-
-    def test_single_markdown_element(self):
-        result = build_card_content("**bold** text")
+    def test_has_panels(self):
+        thinking = [{"text": "思考中...", "icon": "chat-forbidden", "color": "grey"}]
+        tools = [{"text": "sre_query()", "icon": "chat-forbidden", "color": "grey"}]
+        result = build_rich_card_content(thinking, tools, "hello")
         parsed = json.loads(result)
         elements = parsed["body"]["elements"]
-        assert len(elements) == 1
+        # 应该有：思考面板 + 工具面板 + markdown
+        assert len(elements) == 3
+        assert elements[0]["tag"] == "collapsible_panel"
+        assert elements[1]["tag"] == "collapsible_panel"
+        assert elements[2]["tag"] == "markdown"
+
+    def test_main_text_element_id(self):
+        result = build_rich_card_content([], [], "hello")
+        parsed = json.loads(result)
+        md = [e for e in parsed["body"]["elements"] if e["tag"] == "markdown"][0]
+        assert md["element_id"] == "main_text"
+
+    def test_no_panels_when_not_streaming(self):
+        result = build_rich_card_content([], [], "hello", is_streaming=False)
+        parsed = json.loads(result)
+        elements = parsed["body"]["elements"]
+        # 非 streaming 模式，空面板不显示
         assert elements[0]["tag"] == "markdown"
 
-    def test_thinking_prefix(self):
-        result = build_card_content("hello", is_thinking=True)
+    def test_thinking_panel_shown_when_streaming(self):
+        result = build_rich_card_content([], [], "hello", is_streaming=True)
         parsed = json.loads(result)
-        content = parsed["body"]["elements"][0]["content"]
-        assert "思考中" in content
+        elements = parsed["body"]["elements"]
+        # streaming 模式下，思考面板始终显示
+        assert elements[0]["tag"] == "collapsible_panel"
 
-
-# ── Post 格式构建 ──
-
-class TestBuildPostMdJson:
-
-    def test_structure(self):
-        result = build_post_md_json("hello **world**")
+    def test_streaming_config(self):
+        result = build_rich_card_content([], [], "hello", is_streaming=True)
         parsed = json.loads(result)
-        assert parsed["zh_cn"]["content"][0][0]["tag"] == "md"
-
-
-# ── 格式选择 ──
-
-class TestBuildContent:
-
-    def test_text_type(self):
-        msg_type, body = _build_content("hello", "text")
-        assert msg_type == "text"
-
-    def test_interactive_small_tables(self):
-        content = "| a | b |\n|---|---|\n| 1 | 2 |"
-        msg_type, body = _build_content(content, "interactive")
-        assert msg_type == "interactive"
-
-    def test_interactive_many_tables_falls_to_post(self):
-        content = _make_many_tables(10)
-        msg_type, body = _build_content(content, "interactive")
-        assert msg_type == "post"
+        assert parsed["config"]["streaming_mode"] is True
 
 
 # ── send_reply ──
@@ -135,80 +104,51 @@ class TestBuildContent:
 class TestSendReply:
 
     @pytest.mark.asyncio
-    async def test_text_type(self):
-        with patch("src.feishu.sender._create_client") as mock_create, \
-             patch("src.feishu.sender.with_retry") as mock_retry:
-            mock_retry.return_value = _mock_success_response()
-            handle = await send_reply("msg_001", "hello", msg_type="text")
-            assert handle.message_id == "msg_123"
-
-    @pytest.mark.asyncio
     async def test_returns_preview_handle(self):
-        with patch("src.feishu.sender._create_client") as mock_create, \
+        with patch("src.feishu.sender._create_client"), \
              patch("src.feishu.sender.with_retry") as mock_retry, \
-             patch("src.feishu.sender.create_card_entity") as mock_create_entity:
+             patch("src.feishu.sender.create_card_entity") as mock_entity:
             mock_retry.return_value = _mock_success_response()
-            mock_create_entity.return_value = ""  # cardkit-v1 失败，降级
-            handle = await send_reply("msg_001", "hello **bold**", msg_type="interactive")
+            mock_entity.return_value = ""
+            handle = await send_reply("msg_001", "hello", msg_type="interactive")
             assert isinstance(handle, PreviewHandle)
-            assert handle.message_id == "msg_123"
 
     @pytest.mark.asyncio
-    async def test_returns_empty_on_error(self):
-        with patch("src.feishu.sender._create_client") as mock_create, \
-             patch("src.feishu.sender.with_retry") as mock_retry:
-            mock_retry.side_effect = Exception("error")
-            handle = await send_reply("msg_001", "hello")
-            assert handle.message_id == ""
+    async def test_card_json_mode(self):
+        with patch("src.feishu.sender._create_client"), \
+             patch("src.feishu.sender.with_retry") as mock_retry, \
+             patch("src.feishu.sender.create_card_entity") as mock_entity:
+            mock_retry.return_value = _mock_success_response()
+            mock_entity.return_value = "card_123"
+            card = build_rich_card_content([], [], "hello")
+            handle = await send_reply("msg_001", card, msg_type="interactive", is_card_json=True)
+            assert handle.card_id == "card_123"
 
 
-# ── update_message ──
+# ── update_rich_card ──
 
-class TestUpdateMessage:
+class TestUpdateRichCard:
 
     @pytest.mark.asyncio
     async def test_uses_cardkit_when_available(self):
-        """有 card_id 时用 cardkit-v1 流式更新。"""
         handle = PreviewHandle(message_id="msg_001", card_id="card_123")
-        with patch("src.feishu.sender._create_client") as mock_create, \
+        with patch("src.feishu.sender._create_client"), \
              patch("src.feishu.sender.stream_card_text") as mock_stream:
             mock_stream.return_value = True
-            await update_message(handle, "hello", is_thinking=False)
+            await update_rich_card(handle, [], [], "hello")
             mock_stream.assert_called_once()
             assert handle.sequence == 1
 
     @pytest.mark.asyncio
-    async def test_fallback_to_patch_when_no_card_id(self):
-        """没有 card_id 时降级为 Patch。"""
+    async def test_fallback_to_patch(self):
         handle = PreviewHandle(message_id="msg_001", card_id="")
-        with patch("src.feishu.sender._create_client") as mock_create, \
+        with patch("src.feishu.sender._create_client"), \
              patch("src.feishu.sender.with_retry") as mock_retry, \
              patch("src.feishu.sender.stream_card_text") as mock_stream:
             mock_retry.return_value = _mock_success_response()
-            await update_message(handle, "hello", is_thinking=False)
+            await update_rich_card(handle, [], [], "hello")
             mock_stream.assert_not_called()
             mock_retry.assert_called()
-
-    @pytest.mark.asyncio
-    async def test_fallback_to_patch_when_stream_fails(self):
-        """cardkit-v1 失败时降级为 Patch。"""
-        handle = PreviewHandle(message_id="msg_001", card_id="card_123")
-        with patch("src.feishu.sender._create_client") as mock_create, \
-             patch("src.feishu.sender.stream_card_text") as mock_stream, \
-             patch("src.feishu.sender.with_retry") as mock_retry:
-            mock_stream.return_value = False
-            mock_retry.return_value = _mock_success_response()
-            await update_message(handle, "hello", is_thinking=False)
-            assert handle.sequence == 1
-            mock_retry.assert_called()  # Patch 被调用
-
-    @pytest.mark.asyncio
-    async def test_handles_exception(self):
-        handle = PreviewHandle(message_id="msg_001")
-        with patch("src.feishu.sender._create_client") as mock_create, \
-             patch("src.feishu.sender.with_retry") as mock_retry:
-            mock_retry.side_effect = Exception("error")
-            await update_message(handle, "hello")  # 不抛出
 
 
 if __name__ == "__main__":

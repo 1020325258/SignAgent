@@ -3,7 +3,7 @@
 
 import os
 import logging
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, Dict, Any
 from claude_agent_sdk import (
     ClaudeAgentOptions,
     ClaudeSDKClient,
@@ -16,7 +16,6 @@ from claude_agent_sdk import (
 )
 
 from .config import get_default_api_config, get_default_system_prompt
-from .formatters import format_tool_use, format_tool_result, format_thinking
 from .mcp_factory import create_mcp_servers
 from .session_manager import SessionManager
 
@@ -34,16 +33,6 @@ class SignAgent:
         debug: bool = False,
         session_dir: str = "./sessions",
     ):
-        """
-        初始化签约助手
-
-        Args:
-            project_dir: 签约系统项目目录
-            api_config: API 配置，如果为 None 则使用默认配置
-            system_prompt: 自定义系统提示词
-            debug: 是否开启 debug 模式（输出工具调用详情）
-            session_dir: 会话存储目录
-        """
         self.project_dir = project_dir
         self.api_config = api_config or get_default_api_config()
         self.system_prompt = system_prompt or get_default_system_prompt()
@@ -78,72 +67,57 @@ class SignAgent:
         self,
         question: str,
         user_id: str,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         与签约助手进行对话。
 
-        Args:
-            question: 用户问题
-            user_id: 用户标识（飞书 open_id）
-
         Yields:
-            助手的回复内容
+            结构化事件字典:
+            - {"type": "text", "content": "..."} — agent 文本输出
+            - {"type": "thinking", "content": "..."} — 思考过程
+            - {"type": "tool_use", "name": "...", "input": "..."} — 工具调用
+            - {"type": "tool_result", "content": "...", "is_error": bool} — 工具结果（仅日志）
         """
-        # 获取或创建会话 ID
         session_id = self.session_manager.get_or_create_session_id(user_id)
-
-        # 检查是否是新会话（用于决定是否 resume）
         is_new_session = not self.session_manager._is_session_valid(session_id)
 
-        # 创建客户端
         options = self._create_options()
         client = self.session_manager.create_client(
             session_id=session_id,
             options=options,
-            resume=not is_new_session,  # 如果不是新会话，则 resume
+            resume=not is_new_session,
         )
 
-        # 跟踪是否有工具调用
-        has_tool_calls = False
-        is_first_text_after_tools = False
-
         try:
-            # 连接客户端
             await client.connect()
-
-            # 发送查询
             await client.query(question)
 
-            # 接收响应
             async for message in client.receive_response():
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock):
                             if block.text:
-                                if self.debug and has_tool_calls and is_first_text_after_tools:
-                                    yield "\n---\n\n📋 **最终结果**\n\n"
-                                    is_first_text_after_tools = False
-                                yield block.text
+                                yield {"type": "text", "content": block.text}
 
                         elif isinstance(block, ThinkingBlock):
-                            if self.debug and block.thinking:
-                                yield format_thinking(block.thinking)
+                            if block.thinking:
+                                yield {"type": "thinking", "content": block.thinking}
 
                         elif isinstance(block, ToolUseBlock):
-                            if self.debug:
-                                has_tool_calls = True
-                                is_first_text_after_tools = True
-                                yield format_tool_use(block.name, block.input)
+                            yield {
+                                "type": "tool_use",
+                                "name": block.name,
+                                "input": _summarize_tool_input(block.name, block.input),
+                            }
 
                 elif isinstance(message, UserMessage):
-                    if self.debug and message.tool_use_result:
+                    if message.tool_use_result:
                         result = message.tool_use_result
                         is_error = False
                         if isinstance(result, dict):
                             content = result.get("content", "")
                             is_error = result.get("is_error", False)
                         elif isinstance(result, list):
-                            # MCP 工具返回格式: [{"type": "text", "text": "..."}]
                             parts = []
                             for item in result:
                                 if isinstance(item, dict):
@@ -155,32 +129,39 @@ class SignAgent:
                             content = result
                         else:
                             content = str(result)
+                        # 工具结果：打日志 + yield 事件（用于标记工具完成状态）
                         if content:
-                            # 只打日志，不输出到飞书
                             logger.info(f"工具结果: {content[:500]}...")
+                        yield {"type": "tool_result", "content": content, "is_error": is_error}
 
                 elif isinstance(message, ResultMessage):
                     pass
 
-            # 保存会话
             self.session_manager.save_session(user_id, session_id)
 
         except Exception as e:
             logger.error(f"对话失败: {e}")
             raise
         finally:
-            # 断开连接
             try:
                 await client.disconnect()
             except Exception:
                 pass
 
     async def clear_memory(self, user_id: str) -> None:
-        """
-        清除用户会话。
-
-        Args:
-            user_id: 用户标识
-        """
+        """清除用户会话。"""
         self.session_manager.delete_session(user_id)
         logger.info(f"已清除用户会话: {user_id}")
+
+
+def _summarize_tool_input(name: str, inp: dict) -> str:
+    """生成工具输入的摘要文本。"""
+    if not inp:
+        return name
+    params = []
+    for k, v in inp.items():
+        v_str = str(v)
+        if len(v_str) > 100:
+            v_str = v_str[:100] + "..."
+        params.append(f"{k}: {v_str}")
+    return f"{name}({', '.join(params)})"

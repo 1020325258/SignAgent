@@ -5,12 +5,14 @@ import os
 import json
 import logging
 import asyncio
+import time
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
 
 from ..agent import SignAgent
-from .sender import send_reply, update_message, PreviewHandle
+from .sender import send_reply, update_message, update_rich_card, PreviewHandle
+from .card_builder import build_rich_card_content
 
 logger = logging.getLogger(__name__)
 
@@ -44,37 +46,27 @@ def init_agent() -> SignAgent:
 
 
 def handle_message(agent: SignAgent, data: P2ImMessageReceiveV1) -> None:
-    """
-    处理接收到的消息（同步版本）
-
-    Args:
-        agent: SignAgent 实例
-        data: 消息事件数据
-    """
+    """处理接收到的消息（同步版本）。"""
     try:
         logger.info(f"收到消息事件: {data}")
         message = data.event.message
         sender = data.event.sender
 
-        # 获取消息内容
         message_type = message.message_type
         content = message.content
         message_id = message.message_id
         user_id = sender.sender_id.open_id
 
-        # 只处理文本消息
         if message_type != "text":
             logger.info(f"忽略非文本消息: {message_type}")
             return
 
-        # 解析消息内容
         try:
             content_data = json.loads(content)
             question = content_data.get("text", "")
         except json.JSONDecodeError:
             question = content
 
-        # 去掉 @机器人 的部分
         if question.startswith("@"):
             question = question.split(" ", 1)[-1].strip()
 
@@ -83,7 +75,6 @@ def handle_message(agent: SignAgent, data: P2ImMessageReceiveV1) -> None:
 
         logger.info(f"收到消息: {question}, 用户: {user_id}")
 
-        # 在新线程中运行异步任务
         import threading
         def run_async():
             loop = asyncio.new_event_loop()
@@ -103,38 +94,75 @@ def handle_message(agent: SignAgent, data: P2ImMessageReceiveV1) -> None:
 
 
 async def process_message(agent: SignAgent, message_id: str, question: str, user_id: str):
-    """
-    处理消息并发送回复。
-
-    Args:
-        agent: SignAgent 实例
-        message_id: 消息 ID
-        question: 用户问题
-        user_id: 用户标识
-    """
+    """处理消息并发送回复。"""
     try:
-        # 检查是否是清除记忆命令
         if question.strip() in CLEAR_MEMORY_COMMANDS:
             await agent.clear_memory(user_id)
             await send_reply(message_id, "✅ 记忆已清除，我们重新开始吧！")
             return
 
-        # 先发送一条卡片消息（返回 PreviewHandle）
-        handle = await send_reply(message_id, "正在分析你的问题...", msg_type="interactive")
+        # 发送初始卡片（富卡片，带折叠面板）
+        thinking_steps = [{"text": "正在分析你的问题...", "icon": "chat-forbidden", "color": "grey"}]
+        tool_steps = []
+        markdown = " "
+        turn_start = time.time()
+
+        initial_card = build_rich_card_content(thinking_steps, tool_steps, markdown, is_streaming=True)
+        handle = await send_reply(message_id, initial_card, msg_type="interactive", is_card_json=True)
         if not handle.message_id:
             logger.error("发送初始消息失败")
             return
 
         # 收集输出并实时更新
         full_answer = ""
-        async for text in agent.chat(question=question, user_id=user_id):
-            full_answer += text
-            logger.info(f"收到输出: {text[:100]}...")
-            # 流式更新（cardkit-v1 优先，Patch 兜底）
-            await update_message(handle, full_answer, is_thinking=True)
+        thinking_steps = []
+        tool_steps = []
 
-        # 最终更新，去掉思考状态
-        await update_message(handle, full_answer, is_thinking=False)
+        async for event in agent.chat(question=question, user_id=user_id):
+            event_type = event.get("type")
+            elapsed = time.time() - turn_start
+
+            if event_type == "text":
+                full_answer += event["content"]
+                await update_rich_card(handle, thinking_steps, tool_steps, full_answer,
+                                       is_streaming=True, elapsed_seconds=elapsed)
+
+            elif event_type == "thinking":
+                content = event["content"]
+                if len(content) > 500:
+                    content = content[:500] + "..."
+                thinking_steps.append({
+                    "text": content,
+                    "icon": "chat-forbidden",
+                    "color": "grey",
+                })
+                await update_rich_card(handle, thinking_steps, tool_steps, full_answer,
+                                       is_streaming=True, elapsed_seconds=elapsed)
+
+            elif event_type == "tool_use":
+                name = event.get("name", "unknown")
+                inp = event.get("input", "")
+                tool_steps.append({
+                    "text": f"{name}\n{inp}",
+                    "icon": "chat-forbidden",
+                    "color": "grey",
+                    "done": False,
+                })
+                await update_rich_card(handle, thinking_steps, tool_steps, full_answer,
+                                       is_streaming=True, elapsed_seconds=elapsed)
+
+            elif event_type == "tool_result":
+                if tool_steps:
+                    tool_steps[-1]["done"] = True
+                    is_error = event.get("is_error", False)
+                    tool_steps[-1]["color"] = "red" if is_error else "green"
+                await update_rich_card(handle, thinking_steps, tool_steps, full_answer,
+                                       is_streaming=True, elapsed_seconds=elapsed)
+
+        # 最终更新（force=True 跳过节流，状态改为完成）
+        elapsed = time.time() - turn_start
+        await update_rich_card(handle, thinking_steps, tool_steps, full_answer,
+                               is_streaming=False, force=True, status="done", elapsed_seconds=elapsed)
 
         logger.info(f"完整回复: {full_answer[:200]}...")
 
