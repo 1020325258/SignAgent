@@ -138,17 +138,26 @@ class SignAgent:
                 elif isinstance(message, UserMessage):
                     if self.debug and message.tool_use_result:
                         result = message.tool_use_result
+                        is_error = False
                         if isinstance(result, dict):
                             content = result.get("content", "")
                             is_error = result.get("is_error", False)
+                        elif isinstance(result, list):
+                            # MCP 工具返回格式: [{"type": "text", "text": "..."}]
+                            parts = []
+                            for item in result:
+                                if isinstance(item, dict):
+                                    text = item.get("text", "")
+                                    if text:
+                                        parts.append(text)
+                            content = "\n".join(parts)
                         elif isinstance(result, str):
                             content = result
-                            is_error = False
                         else:
                             content = str(result)
-                            is_error = False
                         if content:
-                            yield format_tool_result(content, is_error)
+                            # 只打日志，不输出到飞书
+                            logger.info(f"工具结果: {content[:500]}...")
 
                 elif isinstance(message, ResultMessage):
                     pass

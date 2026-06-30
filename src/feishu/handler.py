@@ -10,7 +10,7 @@ import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
 
 from ..agent import SignAgent
-from .sender import send_reply, update_message
+from .sender import send_reply, update_message, PreviewHandle
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +119,9 @@ async def process_message(agent: SignAgent, message_id: str, question: str, user
             await send_reply(message_id, "✅ 记忆已清除，我们重新开始吧！")
             return
 
-        # 先发送一条卡片消息
-        reply_message_id = await send_reply(message_id, "正在分析你的问题...", msg_type="interactive")
-        if not reply_message_id:
+        # 先发送一条卡片消息（返回 PreviewHandle）
+        handle = await send_reply(message_id, "正在分析你的问题...", msg_type="interactive")
+        if not handle.message_id:
             logger.error("发送初始消息失败")
             return
 
@@ -130,11 +130,11 @@ async def process_message(agent: SignAgent, message_id: str, question: str, user
         async for text in agent.chat(question=question, user_id=user_id):
             full_answer += text
             logger.info(f"收到输出: {text[:100]}...")
-            # 每次收到输出就更新卡片
-            await update_message(reply_message_id, full_answer, is_thinking=True)
+            # 流式更新（cardkit-v1 优先，Patch 兜底）
+            await update_message(handle, full_answer, is_thinking=True)
 
         # 最终更新，去掉思考状态
-        await update_message(reply_message_id, full_answer, is_thinking=False)
+        await update_message(handle, full_answer, is_thinking=False)
 
         logger.info(f"完整回复: {full_answer[:200]}...")
 

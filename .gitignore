@@ -24,6 +24,8 @@ venv.bak/
 # Logs
 *.log
 log/
+logs/
+output/
 
 # OS
 .DS_Store

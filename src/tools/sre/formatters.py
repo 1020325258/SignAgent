@@ -60,11 +60,7 @@ def format_value(action: str, key: str, value: Any) -> str:
         if enum_name:
             return translate_enum(enum_name, value)
 
-    # 截断过长的值
-    str_v = str(value)
-    if len(str_v) > 200:
-        str_v = str_v[:200] + "..."
-    return str_v
+    return str(value)
 
 
 def format_result(action: str, data: Any) -> str:
@@ -99,14 +95,14 @@ def format_list(action: str, data: list) -> str:
         return f"## 查询结果\n\n" + "\n".join(f"- {item}" for item in data)
 
     # 转换为 JSON 格式，包含枚举翻译
-    truncated_data = []
-    for item in data[:50]:  # 最多返回 50 条
-        truncated_item = {}
+    formatted_data = []
+    for item in data:
+        formatted_item = {}
         for k, v in item.items():
-            truncated_item[k] = format_value(action, k, v)
-        truncated_data.append(truncated_item)
+            formatted_item[k] = format_value(action, k, v)
+        formatted_data.append(formatted_item)
 
-    return f"## 查询结果 ({len(data)} 条)\n\n```json\n{json.dumps(truncated_data, ensure_ascii=False, indent=2)}\n```"
+    return f"## 查询结果 ({len(data)} 条)\n\n```json\n{json.dumps(formatted_data, ensure_ascii=False, indent=2)}\n```"
 
 
 def format_object(action: str, data: dict) -> str:

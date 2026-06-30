@@ -352,39 +352,73 @@ class TestHandleRequest:
         assert result == "13800138000"
 
 
-# ── 集成测试 ──────────────────────────────────────────────────
+# ── 集成测试（MCP 工具完整链路） ─────────────────────────────
 
-class TestIntegration:
-    """集成测试（需要网络访问）。"""
+class TestRealFieldConfig:
+    """field_config MCP 工具集成测试。
 
-    @pytest.mark.skip(reason="需要内网访问")
+    调用 sre_query 工具的完整链路，测试实际输出。
+
+    运行方式:
+        python3 -m pytest tests/test_sre_query.py::TestRealFieldConfig -v -s
+    """
+
     @pytest.mark.asyncio
-    async def test_real_contract_query(self):
-        """测试真实合同查询。"""
-        # 输入：action="contract", project_order_id="826041310000003912"
-        # 输出：合同信息，包含 contractCode、status 等字段
-        result = await handle_request("contract", {
+    async def test_field_config_sd25(self):
+        """圣都2.5 整装正签 (version=2) - MCP 工具完整输出。"""
+        from src.tools.sre.tool import sre_query
+        result = await sre_query.handler({
+            "action": "field_config",
+            "business_type": 1,
+            "gb_code": 0,
+            "company_code": "",
+            "contract_type": 3,
+            "version": 2,
+            "page_num": 0,
+            "page_size": 0,
+        })
+        text = result["content"][0]["text"]
+        print(text)
+        assert "查询结果" in text
+
+    @pytest.mark.asyncio
+    async def test_field_config_sd25_prequote(self):
+        """圣都2.5预报价 整装正签 (version=3) - MCP 工具完整输出。"""
+        from src.tools.sre.tool import sre_query
+        result = await sre_query.handler({
+            "action": "field_config",
+            "business_type": 1,
+            "gb_code": 0,
+            "company_code": "",
+            "contract_type": 3,
+            "version": 3,
+            "page_num": 0,
+            "page_size": 0,
+        })
+        text = result["content"][0]["text"]
+        print(text)
+        assert "查询结果" in text
+
+
+
+class TestRealContract:
+    """合同查询 MCP 工具集成测试。
+
+    运行方式:
+        python3 -m pytest tests/test_sre_query.py::TestRealContract -v -s
+    """
+
+    @pytest.mark.asyncio
+    async def test_contract_by_order_id(self):
+        """根据订单号查询合同 - MCP 工具完整输出。"""
+        from src.tools.sre.tool import sre_query
+        result = await sre_query.handler({
             "action": "contract",
-            "project_order_id": "826041310000003912"
+            "project_order_id": "826041310000003912",
         })
-
-        assert result["contractCode"] is not None
-        assert result["status"] is not None
-
-    @pytest.mark.skip(reason="需要内网访问")
-    @pytest.mark.asyncio
-    async def test_real_user_phone_query(self):
-        """测试真实手机号查询。"""
-        # 输入：action="user-phone-query", phone="15524175708"
-        # 输出：用户信息列表，包含 userId
-        result = await handle_request("user-phone-query", {
-            "action": "user-phone-query",
-            "phone": "15524175708"
-        })
-
-        assert result is not None
-        assert len(result) > 0
-        assert result[0]["userId"] is not None
+        text = result["content"][0]["text"]
+        print(text)
+        assert "查询结果" in text
 
 
 if __name__ == "__main__":

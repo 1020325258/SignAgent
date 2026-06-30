@@ -207,8 +207,7 @@ async def _list_items(namespace: str) -> dict:
     for i, item in enumerate(data, 1):
         k = item.get("key", "")
         v = item.get("value", "")
-        if len(v) > 100:
-            v = v[:100] + "..."
+        # 不截断，保留完整值
         lines.append(f"| {i} | `{k}` | {v} |\n")
 
     return {"content": [{"type": "text", "text": "".join(lines)}]}
@@ -254,8 +253,7 @@ async def _search_items(namespace: str, keyword: str) -> dict:
     for i, item in enumerate(matched, 1):
         k = item.get("key", "")
         v = item.get("value", "")
-        if len(v) > 100:
-            v = v[:100] + "..."
+        # 不截断，保留完整值
         lines.append(f"| {i} | `{k}` | {v} |\n")
 
     return {"content": [{"type": "text", "text": "".join(lines)}]}
@@ -293,8 +291,6 @@ async def _get_release(namespace: str) -> dict:
         for item in configurations:
             k = item.get("key", "")
             v = item.get("value", "")
-            if len(v) > 100:
-                v = v[:100] + "..."
             lines.append(f"| `{k}` | {v} |\n")
 
     return {"content": [{"type": "text", "text": "".join(lines)}]}

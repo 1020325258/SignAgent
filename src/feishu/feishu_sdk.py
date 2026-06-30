@@ -31,9 +31,14 @@ from .reaction import TypingIndicator
 # 加载环境变量
 load_dotenv()
 
-# 日志配置
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# 日志配置 - 确保 SignAgent 的日志能正确输出
+# 注意：必须在 lark SDK 初始化之前配置，否则会被覆盖
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    force=True  # 强制重新配置
+)
+logger = logging.getLogger("SignAgent")
 
 # 飞书配置
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID", "")
@@ -72,6 +77,7 @@ def handle_message(data: P2ImMessageReceiveV1) -> None:
         data: 消息事件数据
     """
     try:
+        print(f"[SignAgent] 收到消息事件", flush=True)
         logger.info(f"收到消息事件: {data}")
         message = data.event.message
         sender = data.event.sender

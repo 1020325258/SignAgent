@@ -98,10 +98,6 @@ async def knowledge_search(args: dict[str, Any]) -> dict[str, Any]:
                 file_id = annotation.get("file_id", "")
                 content = doc.get("text", "")
 
-                # 截断过长内容
-                if len(content) > 500:
-                    content = content[:500] + "..."
-
                 # 包含 file_id 用于引用
                 file_ref = f"{file_name}||{file_id}" if file_id else file_name
                 lines.append(f"{i}. **{file_name}** | 来源：{file_ref}")

@@ -42,12 +42,7 @@ def format_tool_result(content: str, is_error: bool = False) -> str:
         格式化后的字符串
     """
     prefix = "❌" if is_error else "✅"
-
-    # 截断过长的结果
-    if len(content) > 1000:
-        content = content[:1000] + "\n... (结果已截断)"
-
-    return f"\n{prefix} **工具结果**\n{content}\n"
+    return f"\n{prefix} **工具结果**\n\n{content}\n"
 
 
 def format_thinking(thinking: str) -> str:
@@ -59,8 +54,4 @@ def format_thinking(thinking: str) -> str:
     Returns:
         格式化后的字符串
     """
-    # 截断过长的思考
-    if len(thinking) > 500:
-        thinking = thinking[:500] + "\n... (思考已截断)"
-
     return f"\n💭 **思考中...**\n{thinking}\n"
