@@ -14,12 +14,59 @@ from claude_agent_sdk import (
     ToolUseBlock,
     ResultMessage,
 )
+from claude_agent_sdk.types import (
+    HookInput,
+    HookContext,
+    HookJSONOutput,
+    HookMatcher,
+)
 
 from .config import get_default_api_config, get_default_system_prompt
 from .mcp_factory import create_mcp_servers
 from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
+# CLI stderr 输出专用 logger，便于独立过滤
+_sdk_stderr_logger = logging.getLogger(f"{__name__}.sdk_stderr")
+
+
+# ── Hook 回调：记录工具调用生命周期 ──────────────────────────
+
+async def _log_pre_tool_use(
+    input_data: HookInput, tool_use_id: str | None, context: HookContext
+) -> HookJSONOutput:
+    """PreToolUse hook：记录工具调用开始。"""
+    tool_name = input_data.get("tool_name", "unknown")
+    tool_input = input_data.get("tool_input", {})
+    # 截断过长的输入参数
+    input_str = str(tool_input)
+    if len(input_str) > 500:
+        input_str = input_str[:500] + "..."
+    logger.info(f"🔧 工具调用开始: {tool_name} | 参数: {input_str}")
+    return {}
+
+
+async def _log_post_tool_use(
+    input_data: HookInput, tool_use_id: str | None, context: HookContext
+) -> HookJSONOutput:
+    """PostToolUse hook：记录工具调用结果。"""
+    tool_name = input_data.get("tool_name", "unknown")
+    tool_response = input_data.get("tool_response", "")
+    response_str = str(tool_response)
+    if len(response_str) > 500:
+        response_str = response_str[:500] + "..."
+    logger.info(f"✅ 工具调用完成: {tool_name} | 结果: {response_str}")
+    return {}
+
+
+async def _log_post_tool_use_failure(
+    input_data: HookInput, tool_use_id: str | None, context: HookContext
+) -> HookJSONOutput:
+    """PostToolUseFailure hook：记录工具调用失败。"""
+    tool_name = input_data.get("tool_name", "unknown")
+    error = input_data.get("error", "unknown error")
+    logger.error(f"❌ 工具调用失败: {tool_name} | 错误: {error}")
+    return {}
 
 
 class SignAgent:
@@ -47,6 +94,12 @@ class SignAgent:
             "skills"
         )
 
+        # CLI stderr 回调：将子进程的 stderr 输出转发到日志
+        def _on_stderr(message: str) -> None:
+            msg = message.rstrip()
+            if msg:
+                _sdk_stderr_logger.debug(msg)
+
         return ClaudeAgentOptions(
             allowed_tools=[
                 "mcp__knowledge__knowledge_search",
@@ -61,6 +114,18 @@ class SignAgent:
             system_prompt=self.system_prompt,
             env=self.api_config,
             max_turns=50,
+            stderr=_on_stderr,
+            hooks={
+                "PreToolUse": [
+                    HookMatcher(hooks=[_log_pre_tool_use]),
+                ],
+                "PostToolUse": [
+                    HookMatcher(hooks=[_log_post_tool_use]),
+                ],
+                "PostToolUseFailure": [
+                    HookMatcher(hooks=[_log_post_tool_use_failure]),
+                ],
+            },
         )
 
     async def chat(
@@ -88,6 +153,12 @@ class SignAgent:
             resume=not is_new_session,
         )
 
+        logger.info(
+            f"对话开始 | user_id={user_id} | session={session_id[:8]}... | "
+            f"{'新会话' if is_new_session else '恢复会话'} | "
+            f"问题: {question[:100]}{'...' if len(question) > 100 else ''}"
+        )
+
         try:
             await client.connect()
             await client.query(question)
@@ -97,13 +168,19 @@ class SignAgent:
                     for block in message.content:
                         if isinstance(block, TextBlock):
                             if block.text:
+                                logger.debug(f"文本输出: {block.text[:200]}...")
                                 yield {"type": "text", "content": block.text}
 
                         elif isinstance(block, ThinkingBlock):
                             if block.thinking:
+                                logger.debug(f"思考过程: {block.thinking[:200]}...")
                                 yield {"type": "thinking", "content": block.thinking}
 
                         elif isinstance(block, ToolUseBlock):
+                            logger.debug(
+                                f"工具请求: {block.name} | "
+                                f"输入: {_summarize_tool_input(block.name, block.input)}"
+                            )
                             yield {
                                 "type": "tool_use",
                                 "name": block.name,
@@ -135,12 +212,19 @@ class SignAgent:
                         yield {"type": "tool_result", "content": content, "is_error": is_error}
 
                 elif isinstance(message, ResultMessage):
-                    pass
+                    # 记录会话结束的统计信息
+                    logger.info(
+                        f"对话结束 | turns={message.num_turns} | "
+                        f"duration={message.duration_ms}ms | "
+                        f"api_duration={message.duration_api_ms}ms | "
+                        f"cost=${message.total_cost_usd:.4f} | "
+                        f"stop_reason={message.stop_reason}"
+                    )
 
             self.session_manager.save_session(user_id, session_id)
 
         except Exception as e:
-            logger.error(f"对话失败: {e}")
+            logger.error(f"对话失败: {e}", exc_info=True)
             raise
         finally:
             try:
