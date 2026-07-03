@@ -3,7 +3,7 @@
 
 from claude_agent_sdk import create_sdk_mcp_server
 
-from ..tools import knowledge_search, sre_query, apollo_query
+from ..tools import knowledge_search, sre_query, apollo_query, fast_log_query
 
 
 def create_mcp_servers() -> dict:
@@ -33,8 +33,16 @@ def create_mcp_servers() -> dict:
         tools=[apollo_query],
     )
 
+    # 创建 FAST 日志查询服务器
+    fast_log_server = create_sdk_mcp_server(
+        name="fast_log",
+        version="1.0.0",
+        tools=[fast_log_query],
+    )
+
     return {
         "knowledge": knowledge_server,
         "sre": sre_server,
         "apollo": apollo_server,
+        "fast_log": fast_log_server,
     }

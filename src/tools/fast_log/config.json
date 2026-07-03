@@ -1,0 +1,13 @@
+{
+  "projects": {
+    "nrs-sales-project": {
+      "appCode": "utopia-nrs-sales-project:prod",
+      "fastIndex": "index-11274-11219*",
+      "fastDomain": "https://fast103-kibana-logcenter-intra.intra.ke.com/internal/search/es"
+    }
+  },
+  "defaultProject": "nrs-sales-project",
+  "defaultTimeRangeHours": 1,
+  "maxTimeRangeHours": 48,
+  "maxResults": 100
+}

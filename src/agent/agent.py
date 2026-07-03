@@ -89,10 +89,6 @@ class SignAgent:
     def _create_options(self) -> ClaudeAgentOptions:
         """创建 ClaudeAgentOptions。"""
         mcp_servers = create_mcp_servers()
-        skills_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            "skills"
-        )
 
         # CLI stderr 回调：将子进程的 stderr 输出转发到日志
         def _on_stderr(message: str) -> None:
@@ -105,13 +101,17 @@ class SignAgent:
                 "mcp__knowledge__knowledge_search",
                 "mcp__sre__sre_query",
                 "mcp__apollo__apollo_query",
+                "mcp__fast_log__fast_log_query",
             ],
             mcp_servers=mcp_servers,
             skills="all",
-            add_dirs=[skills_dir],
             permission_mode="acceptEdits",
             cwd=self.project_dir,
-            system_prompt=self.system_prompt,
+            system_prompt={
+                "type": "preset",
+                "preset": "claude_code",
+                "append": self.system_prompt,
+            },
             env=self.api_config,
             max_turns=50,
             stderr=_on_stderr,
