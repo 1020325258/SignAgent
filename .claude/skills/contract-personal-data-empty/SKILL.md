@@ -1,5 +1,5 @@
 ---
-name: personal-contract-data-empty
+name: contract-personal-data-empty
 description: "当用户询问订单销售合同个性化报价信息为空、个性化报价数据查不到、个性化数据为空、contractPersonalDataV2 返回空列表等问题时使用：查询 FAST 日志定位 contractPersonalDataV2 服务的入参和出参，分析 personalContractDataList 为空的原因。触发词包括：个性化报价为空、个性化合同数据为空、个性化数据为空、报价信息查不到、personalContractDataList 为空、contractPersonalDataV2 返回空、销售合同个性化。"
 ---
 
