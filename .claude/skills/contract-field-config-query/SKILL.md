@@ -1,6 +1,10 @@
 ---
 name: contract-field-config-query
-description: 合同表单配置查询 - 查询合同表单字段配置信息
+version: 1.0.0
+description: "合同表单配置查询 - 查询给前端下发的表单组件配置信息。用于查询合同表单的字段定义、显示规则、校验规则等配置。当用户询问合同表单配置、表单字段配置、表单组件配置时使用。不负责查询合同表单的实际数据（如已填写的表单内容），表单数据存储在 contract_field 表中，需要使用 sre_query(action='contract_field') 查询。"
+metadata:
+  requires:
+    tools: ["sre_query"]
 ---
 
 # 合同表单配置查询
@@ -191,3 +195,10 @@ sre_query(action="dim_combos")
 4. **版本含义**：version 在被窝和圣都场景下的含义不同（被窝只有 1 个版本，圣都有 3 个版本）
 5. **兜底配置**：圣都的 gb_code=0 和 company_code='' 是兜底配置，表示所有没有特殊配置的都走此默认值
 6. **预报价配置**：version=3 是特殊配置，目前只有上海市配置了预报价
+
+## 不在本 skill 范围
+
+- **合同表单数据查询**（已填写的表单内容） → 使用 `sre_query(action='contract_field', contract_code='xxx')`
+- **合同基本信息查询** → 使用 `sre_query(action='contract')`
+- **合同节点查询** → 使用 `sre_query(action='contract_node')`
+- **合同操作日志查询** → 使用 `sre_query(action='contract_log')`
