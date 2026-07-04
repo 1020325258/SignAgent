@@ -2,9 +2,6 @@
 name: contract-field-config-query
 version: 1.0.0
 description: "合同表单配置查询 - 查询给前端下发的表单组件配置信息。用于查询合同表单的字段定义、显示规则、校验规则等配置。当用户询问合同表单配置、表单字段配置、表单组件配置时使用。不负责查询合同表单的实际数据（如已填写的表单内容），表单数据存储在 contract_field 表中，需要使用 sre_query(action='contract_field') 查询。"
-metadata:
-  requires:
-    tools: ["sre_query"]
 ---
 
 # 合同表单配置查询
