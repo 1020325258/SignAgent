@@ -194,11 +194,4 @@ sre_query(action="dim_combos")
 3. **品牌区分**：被窝和圣都的 city_code、company_code、version 取值完全不同
 4. **版本含义**：version 在被窝和圣都场景下的含义不同（被窝只有 1 个版本，圣都有 3 个版本）
 5. **兜底配置**：圣都的 gb_code=0 和 company_code='' 是兜底配置，表示所有没有特殊配置的都走此默认值
-6. **预报价配置**：version=3 是特殊配置，目前只有上海市配置了预报价
-
-## 不在本 skill 范围
-
-- **合同表单数据查询**（已填写的表单内容） → 使用 `sre_query(action='contract_field', contract_code='xxx')`
-- **合同基本信息查询** → 使用 `sre_query(action='contract')`
-- **合同节点查询** → 使用 `sre_query(action='contract_node')`
-- **合同操作日志查询** → 使用 `sre_query(action='contract_log')`
+6. **预报价配置**：version=3 是特殊配置，目前只有上海市配置了预报价`
