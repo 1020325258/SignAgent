@@ -56,6 +56,7 @@ class TestSkillsLoading:
             "contract-data-dictionary",
             "contract-field-config-query",
             "contract-personal-data-empty",
+            "contract-start-date-unselectable",
             "rag-citation",
             "sre-add-api",
         ]
@@ -76,6 +77,7 @@ class TestSkillsLoading:
             "contract-data-dictionary",
             "contract-field-config-query",
             "contract-personal-data-empty",
+            "contract-start-date-unselectable",
             "rag-citation",
             "sre-add-api",
         ]
