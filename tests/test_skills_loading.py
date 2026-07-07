@@ -52,12 +52,12 @@ class TestSkillsLoading:
         claude_skills_dir = os.path.join(project_dir, ".claude", "skills")
 
         expected_skills = [
+            "company-seal-troubleshoot",
             "contract-data-dictionary",
-            "example-skill",
-            "personal-contract-data-empty",
+            "contract-field-config-query",
+            "contract-personal-data-empty",
             "rag-citation",
             "sre-add-api",
-            "sre-troubleshoot",
         ]
 
         for skill_name in expected_skills:
@@ -72,12 +72,12 @@ class TestSkillsLoading:
         claude_skills_dir = os.path.join(project_dir, ".claude", "skills")
 
         expected_skills = [
+            "company-seal-troubleshoot",
             "contract-data-dictionary",
-            "example-skill",
-            "personal-contract-data-empty",
+            "contract-field-config-query",
+            "contract-personal-data-empty",
             "rag-citation",
             "sre-add-api",
-            "sre-troubleshoot",
         ]
 
         for skill_name in expected_skills:
