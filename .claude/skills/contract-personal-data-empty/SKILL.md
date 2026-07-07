@@ -1,6 +1,6 @@
 ---
 name: contract-personal-data-empty
-description: "当用户询问订单销售合同个性化报价信息为空、个性化报价数据查不到、个性化数据为空、contractPersonalDataV2 返回空列表等问题时使用：查询 FAST 日志定位 contractPersonalDataV2 服务的入参和出参，分析 personalContractDataList 为空的原因。触发词包括：个性化报价为空、个性化合同数据为空、个性化数据为空、报价信息查不到、personalContractDataList 为空、contractPersonalDataV2 返回空、销售合同个性化。"
+description: "当用户询问订单销售合同个性化报价信息为空、个性化报价数据查不到、个性化数据为空、contractPersonalDataV2 返回空列表等问题时使用：查询 FAST 日志获取 contractPersonalDataV2 服务的入参和出参。触发词包括：个性化报价为空、个性化合同数据为空、个性化数据为空、报价信息查不到、personalContractDataList 为空、contractPersonalDataV2 返回空、销售合同个性化。"
 ---
 
 # 个性化报价信息为空排查
@@ -50,49 +50,30 @@ description: "当用户询问订单销售合同个性化报价信息为空、个
 
 ### 第二步：查询 FAST 日志
 
-使用 `fast_log_query` 工具查询过去 1 小时的日志：
+使用 `fast_log_query` 工具查询日志，**queryString 使用 Lucene 语法**：
 
 ```
 fast_log_query(
-    keyword="contractPersonalDataV2 AND {订单号}",
-    start_time="{1小时前}",
-    end_time="{当前时间}"
+    queryString='contractPersonalDataV2 && "{订单号}"',
+    size=20
 )
 ```
 
 **示例**：
 ```
 fast_log_query(
-    keyword="contractPersonalDataV2 AND 826062913000003587"
+    queryString='contractPersonalDataV2 && "826062913000003587"'
 )
 ```
 
 **注意**：
-- 默认查询过去 1 小时的日志
-- 如果未查到，询问用户是否需要扩大时间范围（最大 48 小时）
+- `queryString` 为必填参数，使用 Lucene 查询语法（`&&` 表示逻辑与）
+- 默认查询过去 15 小时的日志
+- 如果需要特定时间段，可传入 `start_time` 和 `end_time`（格式：`YYYY-MM-DD HH:MM:SS`）
 
-### 第三步：解析日志结果
+### 第三步：解读日志
 
-从返回的日志中提取**最新一次**请求的入参和出参：
-
-**入参格式**：
-```
-==>>> Service contractPersonalDataV2 入参: {"projectOrderId":"826062913000003587","subOrderNoList":["S14260629130007209"]}
-```
-
-**出参格式**：
-```
-==>>> Service contractPersonalDataV2 出参: {"homeOrderNo":"826062913000003587","personalContractDataList":[]} 耗时: 21 ms
-```
-
-**解析规则**：
-1. 找到最新的入参日志（时间戳最大）
-2. 找到同一次请求的出参日志（时间戳相近）
-3. 提取 JSON 内容
-
-### 第四步：返回结果给用户
-
-将最新一次请求的完整信息返回给用户：
+从返回的日志中提取最新一次请求的入参、出参和耗时，按以下格式呈现给用户。
 
 ## 输出格式
 
@@ -125,48 +106,14 @@ fast_log_query(
 ```
 
 **耗时**: {耗时} ms
-
-### 分析
-
-personalContractDataList 为空数组，表示该订单没有个性化合同数据。
-
-### 可能原因
-1. 该订单未签约个性化合同
-2. 签约流程未完成
-3. 数据写入异常
-
-### 建议
-1. 检查订单是否已完成个性化合同签约流程
-2. 查询 SRE 系统确认合同状态
-3. 如需进一步排查，请提供具体时间点查询更早的日志
 ```
 
-## 未找到日志的处理
-
-如果查询返回 0 条结果，返回以下信息：
-
-```markdown
-## 排查结果
-
-### 查询参数
-- **订单号**: {订单号}
-- **查询时间范围**: 过去 1 小时
-- **命中日志数**: 0 条
-
-### 可能原因
-1. 过去 1 小时内没有该订单的请求
-2. 订单号输入错误
-3. 日志已过期（FAST 日志保留约 30 天）
-
-### 建议
-请确认：
-1. 订单号是否正确？
-2. 是否需要扩大时间范围查询？（最多支持 48 小时）
+如果查询返回 0 条结果：
+```
+未找到 contractPersonalDataV2 日志，请确认订单号是否正确，或是否需要扩大时间范围。
 ```
 
 ## 注意事项
 
-1. **只返回最新一次请求**：如果有多条日志，只取时间戳最大的那一对（入参+出参）
-2. **JSON 格式化**：将入参和出参格式化为易读的 JSON 格式
-3. **敏感信息**：如果包含手机号、身份证等敏感信息，提醒用户注意保护隐私
-4. **时间范围**：默认 1 小时，用户可指定，最大 48 小时
+1. **解读日志，不分析原因**：提取入参、出参、耗时等关键信息呈现给用户，不需要分析为什么数据为空
+2. **时间范围**：默认 15 小时，用户可指定，通过 `start_time` 和 `end_time` 参数传入（格式：`YYYY-MM-DD HH:MM:SS`）
