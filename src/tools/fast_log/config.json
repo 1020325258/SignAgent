@@ -1,13 +1,9 @@
 {
-  "projects": {
-    "nrs-sales-project": {
-      "appCode": "utopia-nrs-sales-project:prod",
-      "fastIndex": "index-11274-11219*",
-      "fastDomain": "https://fast103-kibana-logcenter-intra.intra.ke.com/internal/search/es"
-    }
-  },
-  "defaultProject": "nrs-sales-project",
-  "defaultTimeRangeHours": 1,
-  "maxTimeRangeHours": 48,
-  "maxResults": 100
+  "apiUrl": "https://api.fast.ke.com/es/query",
+  "apiKey": "5dc1a7c244e388912d075ad0c4209b12",
+  "userId": "1000000000000000",
+  "index": "index-11274-11219*",
+  "fields": ["segmentId", "traceId", "data_info_msg", "timestamp", "_index"],
+  "defaultSize": 20,
+  "defaultTimeRangeHours": 15
 }

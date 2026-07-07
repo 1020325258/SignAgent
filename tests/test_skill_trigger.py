@@ -35,6 +35,7 @@ class TestSkillTrigger:
     def test_skill_tool_not_in_allowed_tools(self, agent):
         """测试 Skill 工具不在 allowed_tools 中（SDK 自动处理）"""
         options = agent._create_options()
+        # Skill 工具应由 SDK 通过 skills="all" 自动注入，不需要手动添加
         assert "Skill" not in options.allowed_tools, "Skill 工具应由 SDK 自动注入，不需要手动添加"
 
     def test_skills_configured(self, agent):
@@ -58,52 +59,42 @@ class TestSkillTrigger:
         assert "签约系统助手" in prompt, "应包含角色定义"
         assert "mcp__knowledge__knowledge_search" in prompt, "应包含 MCP 工具说明"
 
-    def test_skill_trigger_words_in_skill_files(self, agent):
-        """测试触发词在 SKILL.md 文件中（而非系统提示词）"""
-        import os
+    def test_company_seal_troubleshoot_skill_exists(self, agent):
+        """测试盖章排查 skill 文件存在"""
         skill_file = os.path.join(
             agent.project_dir, ".claude", "skills",
-            "personal-contract-data-empty", "SKILL.md"
+            "company-seal-troubleshoot", "SKILL.md"
         )
-        assert os.path.exists(skill_file), "SKILL.md 文件应存在"
+        assert os.path.exists(skill_file), f"盖章排查 skill 文件应存在: {skill_file}"
 
-        with open(skill_file, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        # 触发词应该在 SKILL.md 中
-        assert "个性化报价为空" in content, "SKILL.md 应包含触发词 '个性化报价为空'"
-        assert "销售合同个性化" in content, "SKILL.md 应包含触发词 '销售合同个性化'"
-
-    @pytest.mark.asyncio
-    async def test_chat_method_exists(self, agent):
-        """测试 chat 方法存在"""
-        assert hasattr(agent, 'chat'), "Agent 应有 chat 方法"
-        assert callable(agent.chat), "chat 方法应可调用"
-
-    def test_skill_files_content(self, agent):
-        """测试 skill 文件内容正确"""
-        project_dir = agent.project_dir
+    def test_company_seal_troubleshoot_skill_content(self, agent):
+        """测试盖章排查 skill 文件内容正确"""
         skill_file = os.path.join(
-            project_dir, ".claude", "skills", "personal-contract-data-empty", "SKILL.md"
+            agent.project_dir, ".claude", "skills",
+            "company-seal-troubleshoot", "SKILL.md"
         )
-
-        assert os.path.exists(skill_file), f"skill 文件不存在: {skill_file}"
 
         with open(skill_file, "r", encoding="utf-8") as f:
             content = f.read()
 
         # 检查 frontmatter
         assert content.startswith("---"), "skill 文件应以 frontmatter 开头"
-        assert "name: personal-contract-data-empty" in content, "应包含正确的 name"
+        assert "name: company-seal-troubleshoot" in content, "应包含正确的 name"
         assert "description:" in content, "应包含 description"
 
-        # 检查触发条件
-        assert "触发条件" in content, "应包含触发条件章节"
-        assert "个性化报价" in content, "应提到个性化报价"
+        # 检查触发关键词
+        assert "盖章失败" in content, "应包含触发词 '盖章失败'"
+        assert "盖公司章" in content, "应包含触发词 '盖公司章'"
 
         # 检查排查流程
-        assert "排查流程" in content, "应包含排查流程章节"
+        assert "platform_instance_id" in content, "应包含 platform_instance_id 查询"
         assert "fast_log_query" in content, "应提到 fast_log_query 工具"
+
+    @pytest.mark.asyncio
+    async def test_chat_method_exists(self, agent):
+        """测试 chat 方法存在"""
+        assert hasattr(agent, 'chat'), "Agent 应有 chat 方法"
+        assert callable(agent.chat), "chat 方法应可调用"
 
 
 if __name__ == "__main__":

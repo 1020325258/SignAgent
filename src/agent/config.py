@@ -42,18 +42,6 @@ def get_default_system_prompt() -> str:
 3. `mcp__apollo__apollo_query(action, ...)` — 查询 Apollo 配置中心
 4. `mcp__fast_log__fast_log_query(keyword, ...)` — 查询 FAST 日志（支持 AND/OR 语法）
 
-## 技能触发提示
-
-当用户问题涉及以下场景时，**先调用 `Skill` 工具加载对应技能**，再按技能流程执行：
-
-| 场景 | 技能名称 |
-|------|----------|
-| 个性化报价/数据为空 | `personal-contract-data-empty` |
-| SRE 生产环境问题排查 | `sre-troubleshoot` |
-| 合同字段含义/枚举值 | `contract-data-dictionary` |
-| 知识库引用规范 | `rag-citation` |
-| 新增 SRE 查询接口 | `sre-add-api` |
-
 ## 参数识别
 
 - 合同编号：以 "C" 开头 + 数字（如 C1776759658764987）→ 使用 contract_code
