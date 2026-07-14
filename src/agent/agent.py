@@ -46,6 +46,93 @@ async def _log_pre_tool_use(
     return {}
 
 
+# ── 工作目录隔离：路径白名单守卫 ────────────────────────────
+
+# 各工具的路径参数名映射
+_TOOL_PATH_KEYS: dict[str, list[str]] = {
+    "Read": ["file_path"],
+    "Write": ["file_path"],
+    "Edit": ["file_path"],
+    "MultiEdit": ["file_path"],
+    "Glob": ["pattern"],
+    "Grep": ["path"],
+    "NotebookEdit": ["notebook_path"],
+}
+
+
+def _create_path_guard(project_dir: str):
+    """创建一个 PreToolUse hook，拦截所有试图访问工作目录外的文件操作。
+
+    原理：Hook 在每个工具调用前触发，提取工具的路径参数，解析为绝对路径后
+    检查是否在 project_dir 子树内。不在子树内的操作直接返回 deny。
+
+    注意：
+    - Bash 命令由 Sandbox 做 OS 级隔离，本 hook 只做辅助日志
+    - 相对路径天然解析到 cwd（即 project_dir），自动安全
+    - 网络工具（WebFetch/WebSearch）通过 disallowed_tools 禁用
+    """
+    from pathlib import Path
+
+    project_root = Path(project_dir).resolve()
+
+    def _resolve(path_str: str) -> Path:
+        """将工具参数中的路径解析为绝对路径。"""
+        p = Path(path_str)
+        if p.is_absolute():
+            return p
+        # 展开 ~ 并相对于 project_root 解析
+        expanded = Path(p.expanduser().expand_vars())
+        if expanded.is_absolute():
+            return expanded
+        return (project_root / expanded).resolve()
+
+    async def guard(
+        input_data: HookInput, tool_use_id: str | None, context: HookContext
+    ) -> HookJSONOutput:
+        tool_name = input_data.get("tool_name", "")
+        tool_input = input_data.get("tool_input", {})
+
+        if tool_name not in _TOOL_PATH_KEYS:
+            return {}
+
+        for key in _TOOL_PATH_KEYS[tool_name]:
+            path_str = tool_input.get(key)
+            if not path_str or not isinstance(path_str, str):
+                continue
+
+            # Glob pattern 的绝对路径检查（相对 pattern 合法）
+            if tool_name == "Glob" and not path_str.startswith("/"):
+                continue
+
+            # Grep path 的相对路径
+            if tool_name == "Grep" and not path_str.startswith("/"):
+                continue
+
+            resolved = _resolve(path_str)
+
+            try:
+                resolved.relative_to(project_root)
+            except ValueError:
+                logger.warning(
+                    f"⛔ 越界访问被拦截: {tool_name} → {resolved}"
+                )
+                return {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            f"禁止访问工作目录外的路径。\n"
+                            f"请求路径: {resolved}\n"
+                            f"工作目录: {project_root}"
+                        ),
+                    }
+                }
+
+        return {}
+
+    return guard
+
+
 async def _log_post_tool_use(
     input_data: HookInput, tool_use_id: str | None, context: HookContext
 ) -> HookJSONOutput:
@@ -87,7 +174,14 @@ class SignAgent:
         self.session_manager = SessionManager(storage_dir=session_dir)
 
     def _create_options(self) -> ClaudeAgentOptions:
-        """创建 ClaudeAgentOptions。"""
+        """创建 ClaudeAgentOptions。
+
+        安全策略（多层防线）：
+        1. cwd + setting_sources=["project"] — 隔离用户级配置
+        2. PreToolUse Hook 路径白名单 — 拦截 Read/Write/Edit/Glob/Grep 越界访问
+        3. Sandbox — Bash 命令的 OS 级文件系统 + 网络隔离
+        4. tools / disallowed_tools — 禁用不必要的内置工具
+        """
         mcp_servers = create_mcp_servers()
 
         # CLI stderr 回调：将子进程的 stderr 输出转发到日志
@@ -96,28 +190,53 @@ class SignAgent:
             if msg:
                 _sdk_stderr_logger.debug(msg)
 
+        # 创建路径守卫 hook（闭包捕获 self.project_dir）
+        _path_guard = _create_path_guard(self.project_dir)
+
         return ClaudeAgentOptions(
+            # ── 工作目录 ──
+            cwd=self.project_dir,
+            setting_sources=["project"],  # 不加载 ~/.claude/CLAUDE.md
+
+            # ── 工具集：只保留必需的 ──
+            tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
             allowed_tools=[
+                "Read", "Write", "Edit", "Glob", "Grep",
                 "mcp__knowledge__knowledge_search",
                 "mcp__sre__sre_query",
                 "mcp__apollo__apollo_query",
                 "mcp__fast_log__fast_log_query",
             ],
+            disallowed_tools=[
+                "WebFetch",
+                "WebSearch",
+                "NotebookEdit",
+            ],
+
+            # ── MCP ──
             mcp_servers=mcp_servers,
             skills="all",
+
+            # ── 权限 ──
             permission_mode="acceptEdits",
-            cwd=self.project_dir,
+
+            # ── System Prompt ──
             system_prompt={
                 "type": "preset",
                 "preset": "claude_code",
                 "append": self.system_prompt,
             },
+
+            # ── 运行时 ──
             env=self.api_config,
             max_turns=50,
             stderr=_on_stderr,
+
+            # ── Hooks（多层） ──
             hooks={
                 "PreToolUse": [
-                    HookMatcher(hooks=[_log_pre_tool_use]),
+                    HookMatcher(hooks=[_path_guard]),      # 第 1 层：路径白名单
+                    HookMatcher(hooks=[_log_pre_tool_use]), # 第 2 层：审计日志
                 ],
                 "PostToolUse": [
                     HookMatcher(hooks=[_log_post_tool_use]),
@@ -125,6 +244,24 @@ class SignAgent:
                 "PostToolUseFailure": [
                     HookMatcher(hooks=[_log_post_tool_use_failure]),
                 ],
+            },
+
+            # ── Sandbox：Bash 命令的 OS 级隔离 ──
+            sandbox={
+                "enabled": True,
+                "autoAllowBashIfSandboxed": True,
+                "allowUnsandboxedCommands": False,  # 严格模式：禁止绕过沙箱
+                "filesystem": {
+                    # 写权限：仅项目目录 + 临时目录（沙箱默认行为）
+                    "denyRead": [
+                        "~/.ssh/**",
+                        "~/.aws/**",
+                        "~/.config/gcloud/**",
+                    ],
+                },
+                "network": {
+                    "deniedDomains": ["*"],  # Bash 子进程禁止外网
+                },
             },
         )
 

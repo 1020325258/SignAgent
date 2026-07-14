@@ -8,13 +8,12 @@
 
 import json
 import re
-import time
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 
 # ── 内容预处理（参照 cc-connect 的 sanitizeCardMarkdownForCard）──
 
-def _preprocess_markdown(content: str) -> str:
+def preprocess_markdown(content: str) -> str:
     """预处理 markdown 内容，确保飞书 card 正确渲染。"""
     result = []
     for i, ch in enumerate(content):
@@ -38,7 +37,7 @@ def _preprocess_markdown(content: str) -> str:
 
 # ── 折叠面板（参照 cc-connect 的 buildRichPanel）──
 
-def _build_collapsible_panel(title: str, expanded: bool, elements: list) -> dict:
+def _build_collapsible_panel(title: str, expanded: bool, elements: List[dict]) -> dict:
     """构建飞书折叠面板。"""
     return {
         "tag": "collapsible_panel",
@@ -140,7 +139,7 @@ def _build_footer(elapsed_seconds: float = 0, model: str = "") -> list:
 
 def build_card_content(content: str, is_thinking: bool = False) -> str:
     """构建简单飞书卡片（单个 markdown 元素）。"""
-    content = _preprocess_markdown(content)
+    content = preprocess_markdown(content)
 
     if is_thinking:
         content = "⏳ **正在思考中...**\n\n---\n\n" + content
@@ -186,7 +185,7 @@ def build_rich_card_content(
         elapsed_seconds: 已用时间（秒）
         model: 模型名称
     """
-    markdown = _preprocess_markdown(markdown)
+    markdown = preprocess_markdown(markdown)
     elements = []
 
     # Reasoning 折叠面板

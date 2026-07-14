@@ -1,4 +1,5 @@
 claude-agent-sdk
+lark-channel-sdk
 fastapi
 uvicorn
 pydantic
